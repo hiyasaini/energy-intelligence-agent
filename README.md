@@ -34,9 +34,17 @@ python -m pytest                                                       # 102 tes
 
 ## Demo video
 
-`scripts/make_demo_video.py` records the real app running on a NIFTY 50 Track B company, with a voiceover
-(about 1:50). It runs the agent first if there is no finished run, starts the app, walks through every page
-in a headless browser, cuts out page loads and writes `demo_video.mp4` with `demo_video.srt` subtitles.
+## Demo video
+
+▶ **[Watch the 2-minute demo](https://drive.google.com/file/d/1C6c_MIlGpouNDyKll6QXEwHwck4_eI-b/view?usp=sharing)**: the agent running live on NTPC (NIFTY 50, Track B).
+
+The recording was made with `scripts/make_demo_video.py`, which drives the real app in a headless browser,
+walks through every page and writes `demo_video.mp4` (no voice, so a voiceover can be added), with a
+timed voiceover script in `demo_voiceover_script.txt`. To make it again:
+
+    pip install -r requirements-video.txt
+    python -m playwright install chromium
+    python scripts/make_demo_video.py --company NTPC
 
 ```bash
 pip install -r requirements-video.txt
