@@ -1,4 +1,4 @@
-# ⚡ Energy Intelligence Agent
+# Energy Intelligence Agent
 
 **ATMOS 2026 · Track B: Energy, Power & Renewables**
 
