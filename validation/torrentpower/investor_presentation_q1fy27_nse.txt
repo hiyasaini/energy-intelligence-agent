@@ -1,0 +1,57 @@
+Torrent Power Limited — Investor Presentation (Q1 FY27), transcribed excerpts
+(1) INSTALLED / OPERATIONAL GENERATION CAPACITY
+[Company Overview] "Gas based plants: 2,730 MW – Operational"
+[Company Overview] "Coal based plants: 1,762 MW – Operational"
+[Company Overview] "Solar: 1,092 MWp - Operational"
+[Company Overview] "Wind: 980 MW – Operational"
+[Installed Capacity chart] "Gas 2,730 41% 6,564 MWp"
+[Installed Capacity chart] "Operational Capacity (MWp)"
+[Pan India Footprint] "Additionally, ~74 MWp C&I solar Project commissioned in the state of Haryana, Karnataka, Maharashtra"
+[Operational capacity, incl. pipeline] "Installed Capacity (including Pipeline)"   "12,345 MWp"   "5,782 MWp"
+[Renewable Projects footnotes] "*MSEDCL- 264 MW (316.8 MWp) solar project commissioned;"
+[Renewable Projects footnotes] "#59.4 MW capacity commissioned as on 30.06.2026"
+
+(2) UNDER CONSTRUCTION / DEVELOPMENT / PIPELINE
+[Company Overview] "Coal based plants: 1,600 MW – Under Development"
+[Company Overview] "Solar: 1,945 MWp-Under Development"
+[Company Overview] "Wind: 2,236 MW- Under Development"
+[Company Overview] "~8.4 GW across Uttar Pradesh and Maharashtra under pipeline."
+[Company Overview] "Of which 3 GW is under construction with 2 GW tied up with Maharashtra"
+[Renewable Pipeline] "Total   ~2.6 GW   ~4.6 GW   ~29,638"
+[Pumped Storage] "Total Planned Capacity: 8.4 GW (including 3 GW under construction)"
+
+(3) TARGETS
+[Renewable section] "Target to Increase Renewable Portfolio to ~6.25 GWp"
+[Company Overview] "Operational Capacity is estimated to Grow from ~6.6 GWp to ~12.3 GWp"
+[Pumped Storage] "SCOD: Oct’28"
+
+(4) MULTI-PERIOD FINANCIAL TABLES
+[Overview of Operations] Unit note: "Rs in Crore"
+Particulars   Q1 26-27   Q1 25-26   % Growth   FY 25-26
+Revenue from Operations   8,124   7,906   3%   28,966
+Power Purchase Cost   5,818   5,472   18,998
+PBDIT   1,618   1,588   2%   5,864
+Finance Cost   293   213   934
+Depreciation and Amortization Expense   400   390   1,613
+Profit Before Tax   925   985   (6%)   3,317
+Profit After Tax   662   742   (11%)   2,469
+
+[Significant Ramp Up]
+Particulars   2021-22   2022-23   2023-24   2024-25   2025-26
+Revenues from Operations (₹ Crore)   14,257   25,694   27,183   29,165   28,966
+EBIDTA (₹ Crore)   3,826   5,141   4,903   5,795   5,864
+TCI* (₹ Crore)   454   2,117   1,833   2,989   2,416
+Net Worth^ (₹ Crore)   10,289   11,979   13,295   18,968   20,704
+
+[Comfortable Leverage]
+Particulars   21-22   22-23   23-24   24-25   25-26
+Net Debt / EBITDA   2.24   1.97   2.25   1.41   2.06
+Net Debt Equity Ratio   0.80   0.82   0.80   0.40   0.56
+
+[5 Year Trend]
+Particulars   21-22   22-23   23-24   24-25   25-26
+THERMAL PLF (%)*   77%   88%   91%   81%   78%
+
+(6) EVENTS
+[Company Overview / Nabha] "Includes 1,400 MW for Nabha Power – acquired w.e.f 25.06.2026"
+[Key Highlights] "Net Debt to EBITDA of 2.06x; Net Debt to Equity of 0.56x for FY26"

@@ -1,0 +1,26 @@
+NHPC Limited — Integrated Filing (Ind AS), financial results
+Nature of report: Consolidated
+Reporting unit: Lakhs (INR)
+Period columns (income statement): "3 months/ 6 months ended (dd-mm-yyyy)"; "Year to date figures for current period ended (dd-mm-yyyy)"
+
+Income statement
+Revenue from operations   2,81,553.00   11,61,529.00
+Other income   30,499.00   1,07,080.00
+Total income   3,12,052.00   12,68,609.00
+Finance costs   57,428.00   1,42,302.00
+Depreciation, depletion and amortisation expense   64,201.00   1,97,585.00
+Total profit before tax   28,463.00   2,90,784.00
+Total profit (loss) for period   1,54,942.00   4,22,046.00
+
+Statement of assets and liabilities
+Period column: "Year ended (dd-mm-yyyy)"
+Trade receivables, current   2,62,940.00
+Cash and cash equivalents   1,96,115.00
+Borrowings, non-current   46,17,352.00
+Borrowings, current   5,96,042.00
+Total equity   48,40,485.00
+
+Cash flow statement (indirect)
+Period column: "Year ended (dd-mm-yyyy)"
+Net cash flows from (used in) operating activities   3,29,362.00
+Purchase of property, plant and equipment   11,57,228.00

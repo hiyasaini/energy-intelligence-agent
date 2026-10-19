@@ -1,0 +1,25 @@
+KPI Green Energy Limited — Integrated Filing (Ind AS), financial results
+Results type: Standalone
+Reporting unit: Lakhs (INR)
+Period columns: 3 months ended 31-03-2026 (from 01-01-2026); Year ended 31-03-2026 (from 01-04-2025)
+
+Income statement
+Particulars   3 months ended 31-03-2026   Year ended 31-03-2026
+Revenue from operations   59,212.60   1,98,949.65
+Other income   1,073.95   3,870.99
+Total income   60,286.55   2,02,820.64
+Finance costs   4,908.74   16,743.77
+Depreciation   3,398.45   11,431.05
+Profit before tax   17,408.15   53,495.49
+Profit for the period   12,688.44   39,272.85
+
+Statement of assets and liabilities (Year ended 31-03-2026)
+Trade receivables   63,252.28
+Cash and cash equivalents   5,718.71
+Non-current borrowings   3,81,075.96
+Current borrowings   85,861.39
+Total equity   2,52,419.99
+
+Cash flow statement (Year ended 31-03-2026)
+Net cash flows from (used in) operating activities   31,547.79
+Purchase of property, plant and equipment   2,98,655.31

@@ -1,0 +1,12 @@
+streamlit>=1.46   # uses width='stretch'
+pandas>=2.0
+numpy>=1.26
+plotly>=5.20
+pymupdf>=1.24
+pydantic>=2.6
+requests>=2.31
+python-dotenv>=1.0
+beautifulsoup4>=4.12
+networkx>=3.2
+pdfplumber>=0.11   # fallback PDF parser
+pytest>=8.0

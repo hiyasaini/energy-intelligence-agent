@@ -1,0 +1,26 @@
+TORRENT POWER LIMITED — Integrated Filing (Ind AS), financial results
+Results type: Consolidated
+Reporting unit: Lakhs (INR)
+Quarter: 3 months ended 31-03-2026 (01-01-2026 to 31-03-2026), unaudited
+Year: Year ended 31-03-2026 (01-04-2025 to 31-03-2026), audited
+
+Statement of Profit and Loss (quarter column, then year column)
+Particulars   3 months ended 31-03-2026   Year ended 31-03-2026
+Revenue from operations   6,40,607.00   28,96,631.00
+Other income   7,088.00   32,261.00
+Total income   6,47,695.00   29,28,892.00
+Finance costs   25,186.00   93,447.00
+Depreciation, depletion and amortisation expense   42,100.00   1,61,275.00
+Total profit before tax   54,736.00   3,31,677.00
+Total profit (loss) for period   33,149.00   2,46,936.00
+
+Statement of Assets and Liabilities (year-end 31-03-2026 only)
+Trade receivables, current   2,32,976.00
+Cash and cash equivalents   76,661.00
+Borrowings, non-current   11,87,142.00
+Borrowings, current   1,86,151.00
+Total equity   19,70,875.00
+
+Cash Flow Statement (year ended 31-03-2026 only)
+Net cash flows from (used in) operating activities   5,46,417.00
+Purchase of property, plant and equipment   7,70,463.00

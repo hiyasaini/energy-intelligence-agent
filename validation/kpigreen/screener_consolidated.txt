@@ -1,0 +1,20 @@
+KPI Green Energy Ltd — consolidated financials (aggregator)
+Figures in Rs. Crores
+
+Profit & Loss
+Mar 2019   Mar 2020   Mar 2021   Mar 2022   Mar 2023   Mar 2024   Mar 2025   Mar 2026
+Sales +   34   59   102   230   644   1,024   1,735   2,696
+Operating Profit   15   27   58   109   208   337   561   958
+Interest   4   8   16   37   47   86   79   182
+Net Profit +   9   6   22   43   110   162   325   509
+
+Balance Sheet
+Mar 2019   Mar 2020   Mar 2021   Mar 2022   Mar 2023   Mar 2024   Mar 2025   Mar 2026
+Borrowings +   40   139   240   446   676   1,036   1,475   5,197
+Reserves   81   80   102   136   222   775   2,325   2,935
+Equity Capital   18   18   18   18   36   60   98   99
+
+Cash Flows
+Mar 2019   Mar 2020   Mar 2021   Mar 2022   Mar 2023   Mar 2024   Mar 2025   Mar 2026
+Cash from Operating Activity +   -17   40   -27   102   159   -57   241   482
+Cash from Investing Activity +   -15   -119   -63   -189   -309   -387   -2,098   -4,129
