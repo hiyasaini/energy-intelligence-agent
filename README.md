@@ -36,15 +36,9 @@ python -m pytest                                                       # 102 tes
 
 ## Demo video
 
+## Demo video
+
 ▶ **[Watch the 2-minute demo](https://drive.google.com/file/d/1C6c_MIlGpouNDyKll6QXEwHwck4_eI-b/view?usp=sharing)**: the agent running live on NTPC (NIFTY 50, Track B).
-
-The recording was made with `scripts/make_demo_video.py`, which drives the real app in a headless browser,
-walks through every page and writes `demo_video.mp4` (no voice, so a voiceover can be added), with a
-timed voiceover script in `demo_voiceover_script.txt`. To make it again:
-
-    pip install -r requirements-video.txt
-    python -m playwright install chromium
-    python scripts/make_demo_video.py --company NTPC
 
 
 ## Modes
