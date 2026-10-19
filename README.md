@@ -11,7 +11,6 @@ extraction rules and modules run on whatever company is entered.
 
 ```bash
 pip install -r requirements.txt
-cp .env.example .env            # optional: live research works without any key
 streamlit run app.py            # opens the dashboard
 ```
 
