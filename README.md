@@ -46,11 +46,6 @@ timed voiceover script in `demo_voiceover_script.txt`. To make it again:
     python -m playwright install chromium
     python scripts/make_demo_video.py --company NTPC
 
-```bash
-pip install -r requirements-video.txt
-python -m playwright install chromium
-python scripts/make_demo_video.py --company NTPC
-```
 
 ## Modes
 
