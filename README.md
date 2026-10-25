@@ -1,4 +1,4 @@
-# ⚡ Energy Intelligence Agent
+#  Energy Intelligence Agent
 
 **ATMOS 2026 · Finding the Next Signal · Track B: Energy, Power & Renewables**
 
@@ -7,13 +7,8 @@ company's public disclosures on its own, connects evidence across documents, cal
 hypotheses, **tries to disprove them**, and shows a graded discovery where every claim clicks through to the
 filing, page and passage it came from.
 
-> **For the judges.** Demo video: _[add your video link]_ · Run it in three commands (Python 3.11+):
-> `pip install -r requirements.txt` → `streamlit run app.py` → type a company (e.g. **NTPC**) in the search bar.
-> No API key is needed. **Demo mode** runs a fictitious company offline in seconds.
+> 
 
-![NTPC run: KPI cards, the graded discovery and the AI research assistant](docs/ntpc_overview.png)
-<sub>A real run on NTPC (24 Oct 2026): live share price, figures from NSE filings and results tables, the discovery
-with its status and evidence grade, and an assistant that answers only from the run's evidence.</sub>
 
 ---
 
@@ -43,7 +38,7 @@ For every discovery, the eight elements the brief asks for:
 | **Falsification condition** | What future evidence would weaken or reject the finding |
 | **Evidence strength** | Strong / Moderate / Weak / Insufficient, with the reasons listed |
 
-![NTPC Discovery tab: why it matters, evidence strength, counterargument and falsification condition](docs/ntpc_discovery.png)
+
 
 ## How it works
 
@@ -125,7 +120,6 @@ No company names appear in the analysis code (a test fails the build if one does
 
 ## The dashboard
 
-![NTPC Discovery Graph: sources → facts and events → calculations → findings](docs/ntpc_graph.png)
 
 | Page | What it shows |
 |---|---|
@@ -217,4 +211,4 @@ data/companies.csv      identity registry (names, symbols, segments; no findings
 
 ## Team
 
-[Team Name] · ATMOS 2026, BITS Pilani Hyderabad Campus
+[WATTSNEXT] · ATMOS 2026, BITS Pilani Hyderabad Campus
