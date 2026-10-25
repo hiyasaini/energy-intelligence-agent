@@ -12,6 +12,23 @@ KEY, NAME = "hidden_risk", "Hidden Risk"
 NEGATIVE_EVENTS = {"delay": 0.5, "curtailment": 0.45, "rating": 0.0}  # rating handled by direction words
 
 
+def _subject(label: str) -> str:
+    import re
+    m = re.match(r"\s*(.+?)(?::| moved | disclosed| up from | is | growing| down | \()", label)
+    sub = (m.group(1) if m else label).strip()
+    return {"Delays": "project delays", "Curtailments": "curtailments", "Rating pressure": "rating pressure"}.get(sub, sub)
+
+
+def _composite_title(components: list, n_families: int) -> str:
+    """Name what moves together, so the headline says something on its own."""
+    subs = list(dict.fromkeys(_subject(c[1]) for c in sorted(components, key=lambda c: -c[2])))[:3]
+    subs = [x if i == 0 or (len(x) > 1 and x[1].isupper()) else x[0].lower() + x[1:] for i, x in enumerate(subs)]
+    if len(subs) >= 2:
+        named = ", ".join(subs[:-1]) + " and " + subs[-1]
+        return f"{named[0].upper() + named[1:]} flash warnings together ({len(components)} signals, {n_families} area{'s' if n_families != 1 else ''})"
+    return f"{len(components)} warning signals co-occur across {n_families} areas"
+
+
 def run(ctx: AnalysisContext, upstream: list[Signal]) -> ModuleResult:
     res = ModuleResult(KEY, NAME)
     calc = ctx.calculator(KEY)
@@ -26,9 +43,18 @@ def run(ctx: AnalysisContext, upstream: list[Signal]) -> ModuleResult:
     rec, rev = ctx.series("receivables_cr"), ctx.series("revenue_cr")
     common = [p for p in rec.periods if rev.get(p)]
     days = []
-    for p in common[-3:]:
+    mixed = [p for p in common if "unknown" not in (rec.get(p).scope, rev.get(p).scope)
+             and rec.get(p).scope != rev.get(p).scope]
+    if mixed:
+        res.notes.append(f"Receivable days not computed for {', '.join(mixed)}: receivables and revenue come from "
+                         "different reporting scopes (consolidated vs standalone).")
+    for p in [x for x in common if x not in mixed][-3:]:
         d = calc.ratio(f"Receivable days {p}", rec.get(p), rev.get(p), unit="days", scale=365,
                        formula="trade_receivables / revenue × 365")
+        if d.result is not None and not (1 <= d.result <= 730):
+            res.notes.append(f"Receivable days of {d.result:,.0f} in {p} is outside any plausible range; "
+                             "the inputs likely cover different entities or units, so it is not used.")
+            continue
         days.append(d)
         res.rows.append({"indicator": "Receivable days", "period": p, "value": fmt(d.result, "days", 0)})
     if len(days) >= 2 and days[-1].result and days[-2].result and days[-1].result > days[-2].result * 1.2:
@@ -48,13 +74,25 @@ def run(ctx: AnalysisContext, upstream: list[Signal]) -> ModuleResult:
     elif not common:
         res.missing.append("receivables with matching revenue")
 
-    # disclosed negative events
-    for e in ctx.events(["delay", "curtailment"]):
-        components.append(("disclosures", f"Disclosed {e.event_category}: {e.passage[:90]}…",
-                           NEGATIVE_EVENTS[e.event_category], [e.id], []))
-    downgrades = [e for e in ctx.events(["rating"]) if "downgrad" in e.passage.lower() or "negative" in e.passage.lower()]
-    for e in downgrades:
-        components.append(("disclosures", f"Rating pressure: {e.passage[:90]}…", 0.6, [e.id], []))
+    # disclosed negative events: ONE component per kind, however many sentences mention it (a long annual
+    # report can mention "delay" dozens of times; that is one warning, not dozens)
+    def _distinct(events):
+        seen, out = set(), []
+        for e in events:
+            k = " ".join(e.passage.lower().split())[:160]
+            if k not in seen:
+                seen.add(k)
+                out.append(e)
+        return out
+    for cat in ("delay", "curtailment"):
+        evs = _distinct(ctx.events([cat]))
+        if len(evs) >= 2:   # a single mention is anecdote, not a pattern
+            components.append(("disclosures", f"{cat.capitalize()}s disclosed ({len(evs)} distinct mention(s))", NEGATIVE_EVENTS[cat],
+                               [e.id for e in evs[:5]], []))
+    downgrades = _distinct([e for e in ctx.events(["rating"])
+                            if "downgrad" in e.passage.lower() or "negative" in e.passage.lower()])
+    if downgrades:
+        components.append(("disclosures", f"Rating pressure ({len(downgrades)} mention(s))", 0.6, [e.id for e in downgrades[:5]], []))
 
     # data contradictions are themselves a risk to the analysis
     conflicts = sum(len(ctx.series(m).conflicts) for m in
@@ -76,7 +114,7 @@ def run(ctx: AnalysisContext, upstream: list[Signal]) -> ModuleResult:
                           notes=f"{len(components)} components from {len(families)} independent families.")
         res.signals.append(Signal(
             key=f"{KEY}:composite", module=KEY,
-            title=f"{len(components)} warning signals co-occur across {len(families)} areas",
+            title=_composite_title(components, len(families)),
             statement="Independent warnings appear together: " + "; ".join(c[1] for c in components[:5]) +
                       ". Co-occurrence raises the importance of each; it does not show they share a cause.",
             direction="risk", severity=min(0.95, 0.3 + 0.12 * len(components)),

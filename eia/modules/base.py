@@ -50,16 +50,62 @@ class AnalysisContext:
     def __init__(self, run_id: str, company: Company, facts: list[Fact], sources: list[Source]):
         self.run_id = run_id
         self.company = company
-        self.facts = [f for f in facts if f.status != FactStatus.rejected]
+        from ..business import excluded_metrics
+        drop = excluded_metrics(company.segment if company else "")
+        self.facts = [f for f in facts if f.status != FactStatus.rejected and f.metric not in drop]
         self.sources = {s.id: s for s in sources}
         self.tiers: dict[str, SourceTier] = {s.id: s.tier for s in sources}
         self.facts_by_id = {f.id: f for f in self.facts}
         self._cache: dict[tuple, Series] = {}
+        self.peers: list = []            # PeerProfile list (live runs only); empty means no peer check
+        self._own_profile: Optional[dict] = None
+
+    def own_profile(self) -> dict:
+        """The company's comparable figures, computed exactly as they are for peers."""
+        if self._own_profile is None:
+            from ..peers import profile
+            self._own_profile = profile(self.facts, self.tiers)
+        return self._own_profile
+
+    def _raw_series(self, metric: str, periodicity: str = "annual") -> Series:
+        k = ("raw", metric, periodicity)
+        if k not in self._cache:
+            s = build_series(self.facts, metric, self.tiers, periodicity)
+            from ..sanity import ABS_MAX, apply
+            if metric in ABS_MAX:
+                from ..business import business_type
+
+                def revenue(period: str):
+                    rev = self._raw_series("revenue_cr")
+                    r = rev.get(period) or (rev.points[-1] if rev.points else None)
+                    return r.value if r else None
+                s = apply(metric, s, business_type(self.company.segment if self.company else ""), revenue)
+            self._cache[k] = s
+        return self._cache[k]
 
     def series(self, metric: str, periodicity: str = "annual") -> Series:
         k = (metric, periodicity)
         if k not in self._cache:
-            self._cache[k] = build_series(self.facts, metric, self.tiers, periodicity)
+            s = self._raw_series(metric, periodicity)
+            pair = {"installed_capacity_mw": "renewable_capacity_mw", "renewable_capacity_mw": "installed_capacity_mw"}
+            if metric in pair:
+                # renewable capacity cannot exceed total capacity: a period where it does holds two figures that
+                # describe different things (one is a pipeline, a group total or a single segment) - use neither
+                import copy
+                s = copy.deepcopy(s)
+                other = self._raw_series(pair[metric], periodicity)
+                for pt in list(s.points):
+                    o = other.get(pt.period)
+                    if not o:
+                        continue
+                    ren, inst = (pt.value, o.value) if metric == "renewable_capacity_mw" else (o.value, pt.value)
+                    if ren > inst * 1.001:
+                        s.points = [p for p in s.points if p is not pt]
+                        reason = (f"renewable capacity {ren:,.0f} MW exceeds total installed capacity {inst:,.0f} MW in "
+                                  f"{pt.period}; the two figures describe different things, so neither is used.")
+                        s.excluded.append({"period": pt.period, "value": pt.value, "fact_id": pt.fact_id, "reason": reason})
+                        s.warnings.append(f"{metric} {pt.period}: {reason}")
+            self._cache[k] = s
         return self._cache[k]
 
     def latest_point(self, metric: str) -> Optional[Point]:

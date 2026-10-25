@@ -207,11 +207,14 @@ def contested_hypotheses(store: Store, run_id: str) -> list[dict]:
     return out
 
 
-UNIT_SHORT = {"INR_cr": "₹ cr", "MW": "MW", "MU": "MU", "%": "%", "x": "x", "tCO2/MWh": "tCO2/MWh"}
+UNIT_SHORT = {"INR_cr": "₹ cr", "MW": "MW", "MU": "MU", "%": "%", "x": "x", "tCO2/MWh": "tCO2/MWh", "Mt": "Mt",
+              "Mtoe": "Mtoe", "BCM": "BCM", "ckm": "ckm", "MVA": "MVA"}
 LANES = {"target": "Promise / target", "event": "Milestone / announcement", "operating": "Operating result",
          "financial": "Financial result"}
 OPERATING = {"installed_capacity_mw", "renewable_capacity_mw", "generation_mu", "plf_cuf_pct",
-             "capacity_under_construction_mw"}
+             "capacity_under_construction_mw", "coal_production_mt", "coal_offtake_mt", "oil_gas_production_mtoe",
+             "crude_production_mt", "gas_production_bcm", "refinery_throughput_mt", "transmission_ckm",
+             "transformation_mva"}
 
 
 def timeline_df(store: Store, run_id: str) -> pd.DataFrame:
@@ -480,8 +483,10 @@ def esg_series(store: Store, run_id: str) -> dict:
     inst = {p["period"]: p["value"] for p in series_points(store, run_id, "installed_capacity_mw")}
     share = [{"period": k, "value": ren[k] / inst[k] * 100} for k in sorted(set(ren) & set(inst), key=period_sort_key)
              if inst[k]]
-    if not share:  # from capacity by source: (solar + wind + hydro) / reported total
-        ctx = context(store, run_id)
+    ctx = context(store, run_id)
+    from .business import business_type
+    generator = business_type(getattr(ctx.company, "segment", "") or "") == "generator"
+    if not share and generator:  # from capacity by source: (solar + wind + hydro) / reported total
         tot: dict[str, float] = {}
         re_: dict[str, float] = {}
         n: dict[str, int] = {}
@@ -539,8 +544,20 @@ def operational_metrics(store: Store, run_id: str) -> dict:
             best = max(fs, key=lambda f: (f.period_end or "", f.confidence))
             uc = [{"period": best.period or "latest disclosed", "value": best.value, "unit": "MW", "fact_id": best.id}]
     gen = trend(store, run_id, "generation_mu")
-    return {"capacity": cap[-1] if cap else None, "capacity_label": cap_label, "mix": mix,
-            "under_construction": uc[-1] if uc else None, "generation": gen[-1] if gen else None}
+    volumes = []  # production / network figures for oil, gas, coal and transmission businesses
+    for m in PHYSICAL_METRICS:
+        t = trend(store, run_id, m)
+        if t:
+            volumes.append({**t[-1], "metric": m, "label": metric_label(m)})
+    seg = getattr(getattr(context(store, run_id), "company", None), "segment", "") or ""
+    from .business import business_type
+    return {"business": business_type(seg), "capacity": cap[-1] if cap else None, "capacity_label": cap_label, "mix": mix,
+            "under_construction": uc[-1] if uc else None, "generation": gen[-1] if gen else None,
+            "volumes": volumes}
+
+
+PHYSICAL_METRICS = ["coal_production_mt", "coal_offtake_mt", "oil_gas_production_mtoe", "crude_production_mt",
+                    "gas_production_bcm", "refinery_throughput_mt", "transmission_ckm", "transformation_mva"]
 
 
 def balance_ratios(store: Store, run_id: str) -> list[dict]:

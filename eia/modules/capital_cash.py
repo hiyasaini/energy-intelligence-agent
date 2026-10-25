@@ -70,7 +70,8 @@ def run(ctx: AnalysisContext) -> ModuleResult:
         res.signals.append(Signal(
             key=f"{KEY}:leverage", module=KEY, title=f"High leverage: {lev.result:.1f}x debt to EBITDA",
             statement=f"{metric_label(debt_key)} is {lev.result:.1f}x EBITDA in {latest_p}, above the "
-                      f"{LEVERAGE_HIGH:.0f}x level usually treated as stretched for power companies.",
+                      f"{LEVERAGE_HIGH:.0f}x level usually treated as stretched for "
+                      f"{'power companies' if ctx.company.eligible else 'capital-intensive companies'}.",
             direction="risk", severity=min(0.9, 0.4 + lev.result / 20), supporting_fact_ids=lev.input_fact_ids,
             calc_ids=[lev.id],
             limitations=["Contracted, long-tenor renewable assets often carry higher leverage than merchant assets.",
@@ -160,6 +161,12 @@ def run(ctx: AnalysisContext) -> ModuleResult:
                 falsification="Weakened if new assets reaching COD explain the step-up and revenue follows next period.",
                 counter_checks=["recent_commissioning"], counter_queries=[f"{co} commercial operation date"]))
 
+    from ..business import is_lender
+    if is_lender(ctx.company.segment) or "financial services" in (ctx.company.segment or "").lower():
+        # lenders borrow as their business: debt/EBITDA and interest cover say nothing about their health
+        debt_keys = ("leverage", "coverage", "debt_outpaces_ebitda", "deleveraging", "finance_cost_outpaces_revenue")
+        res.signals = [x for x in res.signals if x.key.split(":")[1] not in debt_keys]
+        res.notes.append("Debt-based ratios are not used for a lender (borrowing is its raw material).")
     res.calcs = calc.records
     have = len(S)
     res.status = "insufficient_data" if have == 0 else ("ok" if have >= 5 else "partial")

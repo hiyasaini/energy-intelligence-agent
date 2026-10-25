@@ -1,6 +1,6 @@
 """Canonical metric registry and unit normalisation.
 
-Everything here is sector-generic (Indian power / renewables reporting conventions).
+Everything here is sector-generic (Indian power, renewables, oil & gas and coal reporting conventions).
 Company-specific label aliases can be added through data/metric_aliases.json without code changes.
 """
 from __future__ import annotations
@@ -23,6 +23,11 @@ CANONICAL_UNIT = {
     "ratio": "x",
     "count": "count",
     "intensity": "tCO2/MWh",
+    "mass": "Mt",          # million tonnes (coal, crude, refinery throughput)
+    "oil_eq": "Mtoe",      # million tonnes of oil equivalent
+    "gas_vol": "BCM",      # billion cubic metres
+    "length": "ckm",       # circuit kilometres of transmission line
+    "apparent_power": "MVA",
 }
 
 # unit token (lower-case, normalised) -> (dimension, multiplier to canonical)
@@ -48,6 +53,15 @@ UNIT_TABLE: dict[str, tuple[str, float]] = {
     "%": ("percent", 1.0), "percent": ("percent", 1.0), "per cent": ("percent", 1.0), "pct": ("percent", 1.0),
     "x": ("ratio", 1.0), "times": ("ratio", 1.0),
     # emission intensity (tCO2/MWh == kgCO2/kWh)
+    "million tonnes": ("mass", 1.0), "million tonne": ("mass", 1.0), "million metric tonnes": ("mass", 1.0),
+    "mmt": ("mass", 1.0), "mt": ("mass", 1.0), "mtpa": ("mass", 1.0), "mmtpa": ("mass", 1.0),
+    "lakh tonnes": ("mass", 0.1), "billion tonnes": ("mass", 1000.0), "bt": ("mass", 1000.0),
+    "mmtoe": ("oil_eq", 1.0), "mtoe": ("oil_eq", 1.0), "million tonnes of oil equivalent": ("oil_eq", 1.0),
+    "bcm": ("gas_vol", 1.0), "billion cubic metres": ("gas_vol", 1.0), "billion cubic meters": ("gas_vol", 1.0),
+    "mmscm": ("gas_vol", 0.001),
+    "ckm": ("length", 1.0), "circuit km": ("length", 1.0), "circuit kilometres": ("length", 1.0),
+    "circuit kilometers": ("length", 1.0),
+    "mva": ("apparent_power", 1.0), "gva": ("apparent_power", 1000.0),
     "tco2/mwh": ("intensity", 1.0), "tco2e/mwh": ("intensity", 1.0), "tonnesco2/mwh": ("intensity", 1.0),
     "kgco2/kwh": ("intensity", 1.0), "kgco2e/kwh": ("intensity", 1.0), "kg/kwh": ("intensity", 1.0),
     "gco2/kwh": ("intensity", 0.001), "gco2e/kwh": ("intensity", 0.001),
@@ -136,6 +150,28 @@ _METRICS: list[MetricDef] = [
     MetricDef("emission_intensity", "Emission intensity", "intensity",
               [r"emissions?\s+intensity", r"CO2e?\s+(emissions?\s+)?intensity", r"carbon\s+intensity",
                r"specific\s+(CO2\s+)?emissions?"], "flow", False, "green_growth"),
+    # oil, gas, coal and transmission businesses (Track B beyond power generation)
+    MetricDef("oil_gas_production_mtoe", "Oil & gas production", "oil_eq",
+              [r"(oil\s+(and|&)\s+gas|O\s?\+\s?OEG|hydrocarbons?)\s+production", r"production\s+of\s+(oil\s+(and|&)\s+gas|hydrocarbons)",
+               r"\bO\s?\+\s?OEG\b"], "flow", True, "green_growth"),
+    MetricDef("crude_production_mt", "Crude oil production", "mass",
+              [r"crude(\s+oil)?\s+production", r"production\s+of\s+crude(\s+oil)?", r"crude\s+oil\s+output"],
+              "flow", True, "green_growth"),
+    MetricDef("gas_production_bcm", "Natural gas production", "gas_vol",
+              [r"(natural\s+)?gas\s+production", r"production\s+of\s+(natural\s+)?gas", r"gas\s+output"],
+              "flow", True, "green_growth"),
+    MetricDef("refinery_throughput_mt", "Refinery throughput", "mass",
+              [r"(refinery|refining|crude)\s+throughput", r"crude\s+(oil\s+)?(processed|processing)", r"throughput\s+of"],
+              "flow", True, "green_growth"),
+    MetricDef("coal_offtake_mt", "Coal offtake", "mass",
+              [r"(coal\s+)?off[\s-]?take", r"coal\s+dispatch(es)?", r"coal\s+supplies"], "flow", True, "green_growth"),
+    MetricDef("coal_production_mt", "Coal production", "mass",
+              [r"(raw\s+)?coal\s+production", r"production\s+of\s+(raw\s+)?coal", r"coal\s+output"],
+              "flow", True, "green_growth"),
+    MetricDef("transmission_ckm", "Transmission network", "length",
+              [r"transmission\s+(lines?|network)", r"circuit\s+(km|kilomet)", r"line\s+length"], "stock", True, "green_growth"),
+    MetricDef("transformation_mva", "Transformation capacity", "apparent_power",
+              [r"transformation\s+capacity", r"sub[\s-]?stations?", r"transformation\s+capability"], "stock", True, "green_growth"),
     MetricDef("capacity_under_construction_mw", "Capacity under construction", "power",
               [r"under[\s-]*(construction|execution|implementation|development)", r"capacity\s+in\s+(the\s+)?pipeline",
                r"locked[\s-]*in\s+(portfolio|capacity)"], "stock", None, "promise_reality"),
@@ -144,7 +180,7 @@ _METRICS: list[MetricDef] = [
                r"operational\s+(renewable|RE)\s+capacity"], "stock", True, "green_growth"),
     MetricDef("installed_capacity_mw", "Installed / operating capacity", "power",
               [r"installed\s+(generation\s+|generating\s+)?capacity", r"operat(ing|ional)\s+capacity",
-               r"commissioned\s+capacity", r"total\s+(generation\s+)?capacity", r"capacity\s+(stood|stands)\s+at",
+               r"total\s+(generation\s+)?capacity", r"capacity\s+(stood|stands)\s+at",
                r"(cumulative\s+)?capacity\s+(energi[sz]ed|commissioned|operationali[sz]ed)",
                r"(energi[sz]ed|operational)\s+capacity"],
               "stock", True, "green_growth"),
@@ -171,7 +207,7 @@ _METRICS: list[MetricDef] = [
     MetricDef("borrowings_current_cr", "Current borrowings", "money", [r"^\s*current\s+borrowings",
               r"short[\s-]*term\s+borrowings", r"^\s*borrowings,?\s*\(?current"], "stock", False, "capital_cash"),
     MetricDef("gross_debt_cr", "Gross debt / borrowings", "money",
-              [r"gross\s+debt", r"total\s+(debt|borrowings)", r"\bborrowings\b", r"\bdebt\b"], "stock", False, "capital_cash"),
+              [r"gross\s+debt", r"total\s+(debt|borrowings)", r"\bborrowings?\b", r"\bdebt\b"], "stock", False, "capital_cash"),
     MetricDef("cash_cr", "Cash & equivalents", "money",
               [r"cash\s+(and|&)\s+(cash\s+equivalents|bank)", r"cash\s+balance", r"liquidity\s+of"], "stock", True, "capital_cash"),
     MetricDef("finance_cost_cr", "Finance costs", "money",
@@ -200,6 +236,11 @@ TARGET_BASE = {
     "capex_target_cr": "capex_cr",
     "generation_target_mu": "generation_mu",
     "revenue_target_cr": "revenue_cr",
+    "coal_target_mt": "coal_production_mt",
+    "oil_gas_target_mtoe": "oil_gas_production_mtoe",
+    "refining_target_mt": "refinery_throughput_mt",
+    "transmission_target_ckm": "transmission_ckm",
+    "transformation_target_mva": "transformation_mva",
 }
 TARGET_LABELS = {
     "capacity_target_mw": "Capacity target",
@@ -207,6 +248,11 @@ TARGET_LABELS = {
     "capex_target_cr": "Capex plan / guidance",
     "generation_target_mu": "Generation target",
     "revenue_target_cr": "Revenue target",
+    "coal_target_mt": "Coal production target",
+    "oil_gas_target_mtoe": "Oil & gas production target",
+    "refining_target_mt": "Refining target",
+    "transmission_target_ckm": "Transmission network target",
+    "transformation_target_mva": "Transformation capacity target",
 }
 
 
@@ -230,7 +276,7 @@ def load_alias_overrides(path: Optional[Path] = None) -> dict[str, list[str]]:
     if not p.exists():
         return {}
     try:
-        data = json.loads(p.read_text())
+        data = json.loads(p.read_text(encoding="utf-8"))
     except Exception:
         return {}
     out = {}

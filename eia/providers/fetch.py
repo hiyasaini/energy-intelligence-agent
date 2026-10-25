@@ -64,7 +64,7 @@ class Fetcher:
             data = b"".join(chunks)
             ct = r.headers.get("Content-Type", "")
             key.write_bytes(data)
-            key.with_suffix(".ct").write_text(ct)
+            key.with_suffix(".ct").write_text(ct, encoding="utf-8")
             return FetchResult(url, True, data, ct, r.url)
         except requests.RequestException as e:
             return FetchResult(url, False, error=f"{type(e).__name__}: {str(e)[:200]}")

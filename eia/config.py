@@ -43,6 +43,7 @@ class Settings:
 
     direct_sources: bool = field(default_factory=lambda: os.getenv("EIA_DIRECT_SOURCES", "on").lower()
                                  not in ("off", "none", "false", "0"))
+    peers: int = field(default_factory=lambda: _int("EIA_PEERS", 3))   # 0 turns the peer comparison off
     max_rounds: int = field(default_factory=lambda: _int("EIA_MAX_ROUNDS", 3))
     max_sources_per_round: int = field(default_factory=lambda: _int("EIA_MAX_SOURCES_PER_ROUND", 8))
     max_pdf_pages: int = field(default_factory=lambda: _int("EIA_MAX_PDF_PAGES", 350))
@@ -62,6 +63,7 @@ class Settings:
             "max_rounds": self.max_rounds,
             "max_sources_per_round": self.max_sources_per_round,
             "direct_sources": self.direct_sources,
+            "peers": self.peers,
             "keys_present": {
                 "TAVILY_API_KEY": bool(self.tavily_api_key),
                 "SERPER_API_KEY": bool(self.serper_api_key),

@@ -7,6 +7,8 @@ Two link types, both labelled 'inferred' and never described as causal:
 """
 from __future__ import annotations
 
+import re
+
 from ..calculations import MIN_CORR_PERIODS
 from ..metrics import metric_label
 from ..periods import fy_from_date, fy_label, period_sort_key
@@ -31,7 +33,11 @@ def run(ctx: AnalysisContext) -> ModuleResult:
     calc = ctx.calculator(KEY)
     co = ctx.company.name
     tested = 0
+    from ..business import is_lender
+    lender = is_lender(ctx.company.segment if ctx.company else "")
     for a, b, lag, sign, rel in PAIRS:
+        if lender and {a, b} & {"gross_debt_cr", "finance_cost_cr", "net_debt_cr"}:
+            continue   # a lender's debt and interest move together by construction
         for periodicity in ("annual", "quarterly"):
             sa, sb = ctx.series(a, periodicity), ctx.series(b, periodicity)
             if len(sa) < MIN_CORR_PERIODS or len(sb) < MIN_CORR_PERIODS:
@@ -67,6 +73,7 @@ def run(ctx: AnalysisContext) -> ModuleResult:
     # event -> metric consistency (commissioning -> capacity)
     cap_key = "renewable_capacity_mw" if ctx.has("renewable_capacity_mw") else "installed_capacity_mw"
     cap = ctx.series(cap_key)
+    gaps: dict[str, list] = {}
     for e in ctx.events(["commissioning"]):
         if e.value is None or not e.period_end:
             continue
@@ -82,9 +89,14 @@ def run(ctx: AnalysisContext) -> ModuleResult:
             relation="concerns", label=RelLabel.observed, note="Commissioning disclosure concerns this metric"))
         if not cur or not prev:
             continue
-        add = calc.change(f"Capacity added in {fy_label(fy)}", prev, cur)
-        if add.result is None:
+        # a commissioning cannot be larger than the whole portfolio, and a sentence with a target or a future
+        # year describes a plan, not a commissioning
+        if e.value > cur.value or re.search(r"\b(target|by\s+20\d\d|plan(s|ned)?|aim|envisag|goal|pipeline)\b",
+                                             e.passage or "", re.I):
             continue
+        add = calc.change(f"Capacity added in {fy_label(fy)}", prev, cur)
+        if add.result is None or add.result < 0:
+            continue   # capacity fell: a divestment or a figure on a different basis, not a missing commissioning
         ok = add.result >= e.value * 0.8
         res.relationships.append(Relationship(
             run_id=ctx.run_id, src_type="fact", src_id=e.id, dst_type="calc", dst_id=add.id,
@@ -96,18 +108,26 @@ def run(ctx: AnalysisContext) -> ModuleResult:
                          "r": "consistent" if ok else "inconsistent",
                          "periods": f"{fy_label(fy)} addition {fmt(add.result, 'MW')}"})
         if not ok:
-            res.signals.append(Signal(
-                key=f"{KEY}:event_gap:{e.id}", module=KEY,
-                title="Announced commissioning not visible in reported capacity",
-                statement=f"A commissioning of {fmt(e.value, 'MW')} is disclosed ({e.period_end}), but reported "
-                          f"{metric_label(cap_key).lower()} rose only {fmt(add.result, 'MW')} in {fy_label(fy)}.",
-                direction="risk", severity=0.55, supporting_fact_ids=[e.id, cur.fact_id, prev.fact_id],
-                calc_ids=[add.id],
-                limitations=["The commissioned asset may sit in a JV/parent outside reported scope.",
-                             "Retirements or divestments in the same year offset additions."],
-                falsification="Rejected if the asset is shown to be outside the reporting scope or offset by retirements.",
-                counter_checks=["scope_or_retirement"],
-                counter_queries=[f"{co} joint venture capacity", f"{co} divestment retirement capacity"]))
+            gaps.setdefault(fy_label(fy), []).append((e, add, cur, prev))
+
+    # one finding per year, however many commissioning sentences mention it
+    for fyl, items in sorted(gaps.items()):
+        e, add, cur, prev = max(items, key=lambda x: x[0].value or 0)
+        n = len({round(x[0].value or 0) for x in items})
+        res.signals.append(Signal(
+            key=f"{KEY}:event_gap:{fyl}", module=KEY,
+            title=f"Announced commissioning not visible in reported capacity ({fyl})",
+            statement=f"{n} commissioning disclosure(s) for {fyl}, the largest {fmt(e.value, 'MW')} ({e.period_end}), "
+                      f"but reported {metric_label(cap_key).lower()} rose only {fmt(add.result, 'MW')} in {fyl}.",
+            direction="risk", severity=0.55,
+            supporting_fact_ids=list(dict.fromkeys([x[0].id for x in items][:5] + [cur.fact_id, prev.fact_id])),
+            calc_ids=[add.id],
+            limitations=["The commissioned asset may sit in a JV/parent outside reported scope.",
+                         "Retirements or divestments in the same year offset additions.",
+                         "A disclosure may restate capacity commissioned in an earlier year."],
+            falsification="Rejected if the asset is shown to be outside the reporting scope or offset by retirements.",
+            counter_checks=["scope_or_retirement"],
+            counter_queries=[f"{co} joint venture capacity", f"{co} divestment retirement capacity"]))
 
     res.calcs = calc.records
     n_events = len(ctx.events(["commissioning"]))

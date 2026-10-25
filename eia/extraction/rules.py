@@ -17,11 +17,13 @@ from typing import Optional
 
 from ..metrics import METRICS, SOURCE_CAPACITY, TARGET_BASE, metric_dimension, parse_number, unit_factor
 from ..periods import (header_periods as header_periods_in, parse_asof, parse_period, parse_target_year,
-                       period_end)
+                       period_end, is_annual, is_quarter)
 from ..schema import Fact, FactStatus, FactType, Scope
 from .documents import Document
 
-UNIT_RX = (r"t\s?CO2e?\s?/\s?MWh|kg\s?CO2e?\s?/\s?kWh|g\s?CO2e?\s?/\s?kWh|lakh\s+crores?|lac\s+crores?|thousand\s+crores?|crores?|cr\.?|lakhs?|lacs?|million\s+units|billion\s+units|"
+UNIT_RX = (r"million\s+tonnes\s+of\s+oil\s+equivalent|million\s+metric\s+tonnes|million\s+tonnes?|billion\s+tonnes|lakh\s+tonnes|"
+           r"MMTOE|MTOE|MMTPA|MTPA|MMT|MT|BCM|billion\s+cubic\s+met(?:re|er)s|MMSCM|circuit\s+kilomet(?:re|er)s|circuit\s+km|cKm|MVA|GVA|"
+           r"t\s?CO2e?\s?/\s?MWh|kg\s?CO2e?\s?/\s?kWh|g\s?CO2e?\s?/\s?kWh|lakh\s+crores?|lac\s+crores?|thousand\s+crores?|crores?|cr\.?|lakhs?|lacs?|million\s+units|billion\s+units|"
            r"million|mn|billion|bn|GWh|GWp|GWac|GW|MWp|MWac|MWdc|MW|MUs?|BU|TWh|MWh|kWh|per\s+cent|percent|%")
 CURRENCY_RX = r"(?:₹|Rs\.?|INR|US\$|USD|\$)"
 NUM_RX = r"\(?-?\d{1,3}(?:,\d{2,3})*(?:\.\d+)?\)?|\(?-?\d+(?:\.\d+)?\)?"
@@ -34,7 +36,7 @@ TARGET_CUES = re.compile(
     r"plan(ned)?\s+(of|outlay)|outlay\s+of|guided|by\s+(the\s+end\s+of\s+)?(FY\s?'?\d{2,4}|20[2-6]\d)\b(?!\s*%))", re.I)
 DELTA_CUES = re.compile(
     r"(\bby\b|\bincrease\s+of\b|\bdecrease\s+of\b|\bgrowth\s+of\b|\bdecline\s+of\b|\bup\b|\bdown\b|\bhigher\s+by\b|"
-    r"\blower\s+by\b|\badditional\b|\badded\b|\baddition\s+of\b)\s*(?:of\s+)?(?:₹|Rs\.?|INR)?\s*$", re.I)
+    r"\blower\s+by\b|\badditional\b|\banother\b|\bfurther\b|\badded\b|\baddition\s+of\b)\s*(?:of\s+)?(?:₹|Rs\.?|INR)?\s*$", re.I)
 EVENT_CUES = [
     ("commissioning", re.compile(r"\b(commissioned|commissioning\s+of|achieved\s+COD|commercial\s+operation|operationali[sz]ed)\b", re.I)),
     ("award", re.compile(r"\b(won|awarded|secured|letter\s+of\s+award|\bLoA\b|bagged)\b", re.I)),
@@ -43,7 +45,7 @@ EVENT_CUES = [
                              r"refinanc\w+|term\s+loan\s+sanction\w*)", re.I)),
     ("rating", re.compile(r"\b(credit\s+rating|rating\s+(upgrade|downgrade|reaffirm\w*)|upgraded|downgraded|outlook\s+(revised|changed))\b", re.I)),
     ("acquisition", re.compile(r"\b(acquired|acquisition\s+of|to\s+acquire)\b", re.I)),
-    ("delay", re.compile(r"\b(delay(ed|s)?|deferred|postponed|slipp(ed|age)|behind\s+schedule)\b", re.I)),
+    ("delay", re.compile(r"\b(delay(ed|s)?|postponed|slipp(ed|age)|behind\s+schedule)\b(?!\s+coker)", re.I)),
     ("curtailment", re.compile(r"\b(curtail(ed|ment)|grid\s+(constraint|congestion)|transmission\s+constraint)\b", re.I)),
 ]
 DATE_RX = re.compile(
@@ -70,10 +72,19 @@ class ExtractionContext:
     source_id: str
     default_period: Optional[str] = None
     is_synthetic: bool = False
+    scope_hint: str = ""      # e.g. the document URL or title; "/consolidated/" there sets the default scope
+    company_words: tuple = ()  # the company's own names (registry name, aliases, symbol): mark "own" statements
+
+
+_SCOPE_LINK = re.compile(r"\bview\s+(?:standalone|consolidated)\b|\b(?:standalone|consolidated)\s+view\b", re.I)
+_SCOPE_LABEL = re.compile(r"\b(consolidated|standalone)\s+(?:figures|financials?|results|statements?|basis)\b", re.I)
 
 
 def _scope_of(text: str) -> Scope:
-    t = text.lower()
+    t = _SCOPE_LINK.sub(" ", text).lower()        # link text to the other view says nothing about this one
+    lab = {m.group(1).lower() for m in _SCOPE_LABEL.finditer(t)}
+    if len(lab) == 1:
+        return Scope.consolidated if "consolidated" in lab else Scope.standalone
     c, s = "consolidated" in t, "standalone" in t
     if c and not s:
         return Scope.consolidated
@@ -107,6 +118,50 @@ def _event_date(text: str) -> Optional[str]:
         return date(y, mo, d).isoformat()
     except Exception:
         return None
+
+
+NATIONAL_CUES = re.compile(r"\bIndia(?:'s|’s)?\b|\bcountry(?:'s|’s)?\b|\bnation(?:al|'s|’s)?\b|\bgovernment\b|\bGoI\b|"
+                          r"\bministry\b|\bMoP\b|\bMNRE\b|\bglobal(?:ly)?\b|\bworld(?:wide)?\b|\bsector\b", re.I)
+OWN_CUES = re.compile(r"\b(?:our|its|company(?:'s|’s)|group(?:'s|’s))\b|\bwe\s+(?:aim|plan|target|intend|expect|will)", re.I)
+
+
+PHYSICAL_DIMS = {"power", "energy", "mass", "oil_eq", "gas_vol", "length", "apparent_power"}
+
+
+PHYS_INCREMENT_AFTER = re.compile(r"^[^.;]{0,60}?\b(added|addition|additions|was\s+commissioned|were\s+commissioned)\b", re.I)
+PHYS_INCREMENT_BEFORE = re.compile(r"\b(additions?|added|adding|increase[ds]?\s+by|grew\s+by|rose\s+by)\s*(of\s+)?\(?\s*$", re.I)
+PHYS_TOTAL_BEFORE = re.compile(r"\b(total|cumulative|aggregate|taking\s+the|operational|operating|installed)\b[^.;]{0,40}$", re.I)
+PHYS_RATIO = re.compile(r"intensity|per\s+(unit|kwh|mwh|mw|tonne)|/\s*(total|kwh|mwh|mw)|saving|saved|save\b|consum", re.I)
+CAPACITY_KEYS = {"installed_capacity_mw", "renewable_capacity_mw"}
+
+
+OWN_STRONG = re.compile(r"\b(our|we|us|the\s+company|your\s+company|the\s+corporation|your\s+corporation|the\s+group)\b", re.I)
+
+
+def _physical_ok(sentence: str, nm, key: str, mdef, ctx, kw_end: int = 0) -> bool:
+    """Generic tests for capacity, generation and production numbers written in prose."""
+    before, after = sentence[max(0, nm.start() - 80):nm.start()], sentence[nm.end():nm.end() + 70]
+    between = sentence[max(kw_end, nm.start() - 40):nm.start()] if kw_end < nm.start() else sentence[max(0, nm.start() - 40):nm.start()]
+    own_words = [w for w in getattr(ctx, "company_words", ()) if w]
+    own = bool(OWN_STRONG.search(sentence)) or any(re.search(rf"\b{re.escape(w)}\b", sentence, re.I) for w in own_words)
+    if not is_target_sentence_number(sentence, nm) and NATIONAL_CUES.search(sentence) and not own:
+        return False   # a country, global or sector statistic quoted for context
+    if PHYS_RATIO.search(before[-60:]) or PHYS_RATIO.search(after[:25]):
+        return False   # a ratio, intensity or saving, not a level
+    if mdef.kind == "stock" and not is_target_sentence_number(sentence, nm):
+        if PHYS_INCREMENT_BEFORE.search(before) or (PHYS_INCREMENT_AFTER.search(after) and not PHYS_TOTAL_BEFORE.search(before)):
+            return False   # capacity added in the year, not the capacity level
+        if key in CAPACITY_KEYS and NOT_OPERATING.search(between + " " + after[:60]) and \
+                not PHYS_TOTAL_BEFORE.search(before):
+            return False   # pipeline, locked-in or under-construction capacity
+        if key in CAPACITY_KEYS and re.search(r"locked[\s-]*in|including\s+under|portfolio\s+of", before[-50:] + after[:50], re.I):
+            return False
+    return True
+
+
+def is_target_sentence_number(sentence: str, nm) -> bool:
+    """Targets have their own national-goal filter further down."""
+    return bool(TARGET_CUES.search(sentence)) and parse_target_year(sentence) is not None
 
 
 def _target_metric(base: str, sentence: str) -> Optional[str]:
@@ -146,7 +201,13 @@ def _nearest_period(sentence: str, start: int, end: int) -> Optional[str]:
         if not (m and FUTURE_CUE.search(after[:m.start()])):
             return p
     before = sentence[max(0, start - 30):start]
-    return parse_period(before) or parse_asof(before)
+    p = parse_period(before) or parse_asof(before)
+    if p and is_annual(p):
+        # the window may have cut "Q1 " off "Q1 FY 27": a quarter for the same year just before wins
+        wide = parse_period(sentence[max(0, start - 40):start])
+        if wide and is_quarter(wide) and wide.endswith(p[2:]):
+            return wide
+    return p
 
 
 BEFORE_CONNECTOR = re.compile(r"^\s*(of|in|is|are|was|were)?\s*(\w+\s+){0,2}(of\s+)?$", re.I)
@@ -193,7 +254,9 @@ def extract_from_sentence(sentence: str, ctx: ExtractionContext, page_no: int, p
                     continue
                 best = i
             elif s >= nm.end() and s - nm.end() <= 30 and BEFORE_CONNECTOR.match(sentence[nm.end():s]):
-                if best is None:
+                # "60 GW of renewable capacity": a keyword right after the number binds to it, unless the
+                # keyword before it has no number yet
+                if best is None or used_kw.get(best):
                     best = i
                 break
         if best is None:
@@ -202,6 +265,10 @@ def extract_from_sentence(sentence: str, ctx: ExtractionContext, page_no: int, p
         mdef = METRICS[key]
         if key in SOURCE_CAPACITY and NOT_OPERATING.search(sentence):
             continue  # pipeline / planned capacity is not operating capacity
+        if key == "refinery_throughput_mt" and re.search(r"pipeline", sentence[max(0, s - 40):e + 40], re.I):
+            continue  # pipeline throughput (oil moved through pipelines) is not refinery throughput
+        if mdef.dimension in PHYSICAL_DIMS and not _physical_ok(sentence, nm, key, mdef, ctx, e):
+            continue
         if mdef.dimension == "money" and RATIO_LABEL.search(sentence[max(0, s - 25):e + 15]):
             continue
         if e <= nm.start():
@@ -221,8 +288,12 @@ def extract_from_sentence(sentence: str, ctx: ExtractionContext, page_no: int, p
         period = own_period or sent_period or ctx.default_period or ""
         inferred = not (own_period or sent_period)
         ftype, metric, tyear = FactType.reported, mdef.key, None
+        if is_target and target_year and NATIONAL_CUES.search(sentence[max(0, nm.start() - 120):nm.start()]) and \
+                not OWN_CUES.search(sentence[max(0, nm.start() - 60):nm.start()]):
+            continue  # a country / government goal quoted in the report, not the company's own target
         if is_target and target_year:
-            tm = _target_metric(mdef.key, sentence)
+            # renewable vs total is decided by the words around THIS number, not anywhere in the sentence
+            tm = _target_metric(mdef.key, sentence[max(0, min(s, nm.start()) - 40):max(e, nm.end())])
             if tm:
                 metric, ftype, tyear = tm, FactType.target, target_year
                 period, inferred = (sent_period or ctx.default_period or ""), not sent_period
@@ -241,11 +312,25 @@ def extract_from_sentence(sentence: str, ctx: ExtractionContext, page_no: int, p
     return facts
 
 
+# a delay only counts when it is about a project, and stated as fact (not a risk-factor "could be delayed")
+DELAY_SUBJECT = re.compile(r"\b(project|commission\w*|COD|construction|unit|plant|block|field|mine|well|line|substation|"
+                           r"refinery|execution|schedule|completion|land|clearance|capacity)\b", re.I)
+DELAY_NOISE = re.compile(r"\b(may|might|could|can|would|risks?|potential(ly)?|in\s+case\s+of|if|whether|"
+                         r"without\s+delay|delayed\s+payment|late\s+payment|surcharge|interest\s+on|share\s+transfer|"
+                         r"temporary\s+delay|avoid\w*|minimi[sz]\w*|mitigat\w*|prevent\w*|reduc\w+|"
+                         # accounting-policy text: pension curtailments, capitalisation rules, recognition
+                         r"plan\s+amendment|settlement|service\s+cost|actuarial|gratuity|pension|capitalis\w*|"
+                         r"capitaliz\w*|recogni[sz]\w*|accounting\s+polic\w*)\b", re.I)
+
+
 def extract_events(sentence: str, ctx: ExtractionContext, page_no: int, page_scope: Scope) -> list[Fact]:
     out = []
     for cat, rx in EVENT_CUES:
         m = rx.search(sentence)
         if not m:
+            continue
+        if cat in ("delay", "curtailment") and (DELAY_NOISE.search(sentence) or
+                                                (cat == "delay" and not DELAY_SUBJECT.search(sentence))):
             continue
         cap = None
         raw_v, raw_u = "", ""
@@ -414,10 +499,13 @@ def extract_document(doc: Document, ctx: ExtractionContext) -> list[Fact]:
     if ctx.default_period is None:
         ctx.default_period = document_default_period(doc)
     out: list[Fact] = []
+    doc_scope = _scope_of(ctx.scope_hint.replace("/", " ")) if ctx.scope_hint else Scope.unknown
     for page in doc.pages:
         if not page.text.strip():
             continue
         page_scope = _scope_of(page.text[:600])
+        if page_scope == Scope.unknown:
+            page_scope = doc_scope
         out.extend(extract_tables(page.text, ctx, page.number, page_scope))
         for s in _sentences(page.text):
             if len(ROW_NUM.findall(s)) > 8 or len(re.findall(r"\s{3,}\(?-?[\d,.]+%?\)?", s)) >= 2:

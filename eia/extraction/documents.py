@@ -58,6 +58,42 @@ def _rows_from_words(words: list, y_tol: float = 3.0) -> str:
     return "\n".join(lines)
 
 
+# What makes a page worth reading in a long annual report (weights). Financial statements usually sit in the
+# second half of a 300-700 page report, so a plain "first N pages" cut misses them.
+PAGE_SIGNALS = [
+    (re.compile(r"consolidated\s+(balance\s+sheet|statement\s+of\s+profit|statement\s+of\s+cash|cash\s+flow)", re.I), 6),
+    (re.compile(r"statement\s+of\s+profit\s+and\s+loss|balance\s+sheet\s+as\s+at|cash\s+flow\s+statement", re.I), 4),
+    (re.compile(r"(ten|10|five|5)[\s-]+year|financial\s+highlights|key\s+(financial|performance|operational)|"
+                r"at\s+a\s+glance|performance\s+highlights|operational\s+highlights", re.I), 5),
+    (re.compile(r"installed\s+capacity|commissioned|generation|production|throughput|offtake|transmission\s+(lines|network)|"
+                r"capacity\s+addition|plant\s+load\s+factor|\bPLF\b|\bCUF\b", re.I), 2),
+    (re.compile(r"borrowings|finance\s+costs|trade\s+receivables|capital\s+expenditure|\bcapex\b|revenue\s+from\s+operations", re.I), 2),
+    (re.compile(r"\btarget|by\s+(FY\s?)?20[3-5]\d|\bguidance\b", re.I), 1),
+]
+
+
+def choose_pages(pdf, max_pages: int) -> list[int]:
+    """Page indexes to read: all of them if within budget; else the opening pages plus the highest-scoring rest."""
+    n = len(pdf)
+    if n <= max_pages:
+        return list(range(n))
+    head = min(max_pages // 3, 100)
+    scores = []
+    for i in range(head, n):
+        try:
+            t = pdf[i].get_text("text")[:6000]
+        except Exception:
+            t = ""
+        sc = sum(w * min(3, len(rx.findall(t))) for rx, w in PAGE_SIGNALS) if t.strip() else 0
+        scores.append((sc, i))
+    budget = max_pages - head
+    best = [i for sc, i in sorted(scores, key=lambda x: (-x[0], x[1])) if sc > 0][:budget]
+    if len(best) < budget:  # fill the rest in reading order
+        rest = [i for _, i in scores if i not in set(best)]
+        best += rest[:budget - len(best)]
+    return sorted(set(range(head)) | set(best))
+
+
 def parse_pdf(data: bytes, max_pages: int = 60) -> Document:
     doc = Document(kind="pdf")
     if fitz is not None:
@@ -68,14 +104,20 @@ def parse_pdf(data: bytes, max_pages: int = 60) -> Document:
                 m = re.match(r"D:(\d{4})(\d{2})(\d{2})", cd)
                 if m:
                     doc.published_hint = f"{m.group(1)}-{m.group(2)}-{m.group(3)}"
-                n = min(len(pdf), max_pages)
-                if len(pdf) > max_pages:
-                    doc.warnings.append(f"Only first {max_pages} of {len(pdf)} pages parsed.")
-                for i in range(n):
+                chosen = choose_pages(pdf, max_pages)
+                if len(chosen) < len(pdf):
+                    doc.warnings.append(f"Read {len(chosen)} of {len(pdf)} pages: the opening pages plus the pages "
+                                        "holding financial statements, multi-year highlights and operating data.")
+                for i in chosen:
                     words = pdf[i].get_text("words")
                     doc.pages.append(Page(i + 1, _rows_from_words(words) if words else ""))
             doc.parser = "pymupdf"
-            return doc
+            if any(p.text.strip() for p in doc.pages):
+                return doc
+            # no text at all: some PDFs defeat one reader and not another; try a second one on the opening pages
+            doc.warnings.append("PyMuPDF found no text; trying a second PDF reader on the first pages.")
+            doc.pages = []
+            max_pages = min(max_pages, 40)
         except Exception as e:  # fall through to alternatives
             doc.warnings.append(f"PyMuPDF failed: {e}")
     try:

@@ -327,7 +327,26 @@ def chk_more_periods(ctx, s: Signal) -> CheckOutcome:
     return CheckOutcome("more_periods", "neutral", 0.0, [], "Association re-tested automatically when new periods are collected.")
 
 
+def chk_sector_wide(ctx: AnalysisContext, s: Signal) -> CheckOutcome:
+    """Do listed peers in the same line of business show the same pattern?"""
+    from .peers import compare
+    peers = getattr(ctx, "peers", None) or []
+    r = compare(s.key, ctx.own_profile(), peers) if peers else None
+    if not r:
+        return CheckOutcome("sector_wide", "no_evidence", 0.0, [],
+                            "No peer comparison available (peers not collected or too few comparable figures).")
+    if r["verdict"] == "in_line":
+        return CheckOutcome("sector_wide", "opposes", 0.35, [],
+                            f"Peers look similar or weaker on this measure ({r['label']}: company {r['company']:,.2f} vs "
+                            f"peer median {r['median']:,.2f}; {r['peers']}), so this looks sector-wide rather than "
+                            f"specific to {ctx.company.name}.")
+    return CheckOutcome("sector_wide", "supports", 0.3, [],
+                        f"{ctx.company.name} stands out from its peers ({r['label']}: {r['company']:,.2f} vs peer median "
+                        f"{r['median']:,.2f}; {r['peers']}), so this is company-specific, not a sector pattern.")
+
+
 CHECKS: dict[str, Callable[[AnalysisContext, Signal], CheckOutcome]] = {
+    "sector_wide": chk_sector_wide,
     "pipeline_covers_gap": chk_pipeline_covers_gap,
     "recent_commissioning": chk_recent_commissioning,
     "late_year_commissioning": chk_late_year_commissioning,
@@ -426,7 +445,11 @@ def evaluate_signal(ctx: AnalysisContext, s: Signal, conflicts: set[str], counte
                     final: bool, statuses: Optional[dict[str, HypothesisStatus]] = None) -> dict:
     """Run counter-checks and grade one signal. Returns fields to set on its Hypothesis."""
     outcomes: list[CheckOutcome] = []
-    for name in s.counter_checks:
+    from .peers import comparable
+    names = list(s.counter_checks)
+    if comparable(s.key) and "sector_wide" not in names and getattr(ctx, "peers", None):
+        names.append("sector_wide")  # every comparable finding is checked against peers when they were collected
+    for name in names:
         if name == "components_hold":
             outcomes.append(_components_hold(s, statuses or {}))
             continue

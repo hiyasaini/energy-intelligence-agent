@@ -80,6 +80,8 @@ class Store:
             cur.execute("CREATE INDEX IF NOT EXISTS ix_facts_metric ON facts(run_id, metric)")
             cur.execute("""CREATE TABLE IF NOT EXISTS doc_pages (
                 run_id TEXT, source_id TEXT, page INTEGER, text TEXT, PRIMARY KEY (source_id, page))""")
+            cur.execute("""CREATE TABLE IF NOT EXISTS peer_profiles (
+                run_id TEXT, symbol TEXT, data TEXT, PRIMARY KEY (run_id, symbol))""")
             cur.execute("""CREATE TABLE IF NOT EXISTS module_results (
                 run_id TEXT, key TEXT, round INTEGER, data TEXT, PRIMARY KEY (run_id, key))""")
             self.conn.commit()
@@ -209,6 +211,19 @@ class Store:
         with self._lock:
             rows = self.conn.execute("SELECT key, data FROM module_results WHERE run_id=?", (run_id,)).fetchall()
         return {r["key"]: json.loads(r["data"]) for r in rows}
+
+    # -- peer comparison ---------------------------------------------------------------------------------
+    def save_peers(self, run_id: str, peers: list) -> None:
+        with self._lock:
+            self.conn.execute("DELETE FROM peer_profiles WHERE run_id=?", (run_id,))
+            self.conn.executemany("INSERT OR REPLACE INTO peer_profiles VALUES (?,?,?)",
+                                  [(run_id, p.symbol, json.dumps(p.as_dict(), default=str)) for p in peers])
+            self.conn.commit()
+
+    def peers(self, run_id: str) -> list[dict]:
+        with self._lock:
+            rows = self.conn.execute("SELECT data FROM peer_profiles WHERE run_id=? ORDER BY rowid", (run_id,)).fetchall()
+        return [json.loads(r[0]) for r in rows]
 
     # -- document text (powers the in-app document viewer for every source, online or not) -----------
     def save_pages(self, run_id: str, source_id: str, pages: list[tuple[int, str]]) -> None:

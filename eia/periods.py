@@ -10,7 +10,7 @@ MONTHS = {m: i for i, m in enumerate(
 
 _FY_SPAN = re.compile(r"\b(?:FY\s?'?|F\.Y\.\s?)?(20\d{2})\s?[-–/]\s?(\d{2}|20\d{2})\b", re.I)   # 2023-24, FY 2023-24
 _FY_SHORT = re.compile(r"\bFY\s?'?(\d{2}|20\d{2})\b(?!\s?[-–/]\s?\d)", re.I)                       # FY24, FY2024
-_QTR = re.compile(r"\b(Q[1-4])\s?[- ]?\s?FY\s?'?(\d{2}|20\d{2})\b", re.I)                          # Q2FY25, Q2 FY 2025
+_QTR = re.compile(r"\b(Q[1-4])\s?[- ]?\s?FY\s?'?(\d{2}|20\d{2})\b(?!\s?[-–/]\s?\d)", re.I)                          # Q2FY25, Q2 FY 2025
 _QTR2 = re.compile(r"\b(Q[1-4])\s?[- ]?\s?(?:of\s+)?(?:FY\s?)?(20\d{2})\s?[-–/]\s?(\d{2})\b", re.I)  # Q2 2024-25
 _ENDED = re.compile(
     r"(quarter|half[\s-]year|nine\s+months|year|period|months)\s+ended\s+(?:on\s+)?"
@@ -83,6 +83,11 @@ def _date_from_parts(day, mon, year) -> Optional[date]:
         return None
 
 
+_QTR_WORD = re.compile(r"\b(first|second|third|fourth)\s+quarter\s+(?:of\s+)?(?:the\s+)?(?:FY|financial\s+year)?\s*'?"
+                       r"(20\d{2})\s?[-–/]\s?(\d{2}|20\d{2})\b", re.I)
+_ORD = {"first": 1, "second": 2, "third": 3, "fourth": 4}
+
+
 def parse_period(text: str) -> Optional[str]:
     """Extract the first explicit period mention in text. Returns FYyyyy / QnFYyyyy or None."""
     if not text:
@@ -93,6 +98,9 @@ def parse_period(text: str) -> Optional[str]:
     m = _QTR2.search(text)
     if m:
         return quarter_label(int(m.group(1)[1]), _yr(m.group(2)) + 1)
+    m = _QTR_WORD.search(text)
+    if m:
+        return quarter_label(_ORD[m.group(1).lower()], int(m.group(2)) + 1)
     m = _ENDED.search(text)
     if m:
         kind = m.group(1).lower()
@@ -238,6 +246,13 @@ def header_periods(line: str, context: str = "") -> list[Optional[str]]:
     # quarter-end months (then it is a quarterly table and March = Q4).
     mon = [m for m in _MON_YEAR.finditer(line)]
     quarterly = any(MONTHS[m.group(1)[:3].lower()] in (6, 9, 12) for m in mon)
+    # an annual table can end with one interim column ("Mar 2015 ... Mar 2026 Sep 2026": the latest half-year
+    # balance sheet). Consecutive March years with at most one other month is still an annual table.
+    mar_years = [_yr(m.group(2)) for m in mon if MONTHS[m.group(1)[:3].lower()] == 3]
+    others = [m for m in mon if MONTHS[m.group(1)[:3].lower()] != 3]
+    if quarterly and len(mar_years) >= 3 and len(others) <= 1 and \
+            all(b - a == 1 for a, b in zip(mar_years, mar_years[1:])):
+        quarterly = False
     for m in mon:
         mo, yr = MONTHS[m.group(1)[:3].lower()], _yr(m.group(2))
         d = date(yr, mo, 28)

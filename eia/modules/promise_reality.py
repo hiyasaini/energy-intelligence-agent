@@ -16,8 +16,15 @@ ACTUAL_FOR = {
     "generation_target_mu": ["generation_mu"],
     "revenue_target_cr": ["revenue_cr"],
     "capex_target_cr": ["capex_cr"],
+    "coal_target_mt": ["coal_production_mt", "coal_offtake_mt"],
+    "oil_gas_target_mtoe": ["oil_gas_production_mtoe"],
+    "refining_target_mt": ["refinery_throughput_mt"],
+    "transmission_target_ckm": ["transmission_ckm"],
+    "transformation_target_mva": ["transformation_mva"],
 }
 PACE_RISK = 1.5      # required pace / historical pace above which delivery is at risk
+TARGET_SCALE_MAX = 20.0    # a company plan can be ambitious (SJVN-style 10x growth plans exist); 20x its base is not a plan
+MIN_POWER_BASE_MW = 1000.0  # below this, "installed capacity" is a side portfolio, not the company's base
 
 
 def run(ctx: AnalysisContext) -> ModuleResult:
@@ -37,9 +44,22 @@ def run(ctx: AnalysisContext) -> ModuleResult:
         groups[(t.metric, t.target_year)].append(t)
 
     for (tmetric, tyear), ts in sorted(groups.items(), key=lambda x: (x[0][0], x[0][1])):
+        # a target above any Indian company's scale (e.g. India's 500 GW goal quoted in a report) is not the company's
+        from ..sanity import ABS_MAX
+        cap_abs = ABS_MAX.get(ACTUAL_FOR.get(tmetric, [""])[0])
+        big = [t for t in ts if cap_abs and t.value > cap_abs]
+        if big:
+            res.notes.append(f"{metric_label(tmetric)} of {fmt(max(t.value for t in big), big[0].unit)} by {tyear} is above "
+                             "any Indian company's scale; held out as it is most likely a national or sector goal quoted "
+                             "in the report, not the company's own target.")
+            ts = [t for t in ts if t not in big]
+            if not ts:
+                continue
         ts = sorted(ts, key=lambda f: (f.period_end or "", f.confidence))
         target = ts[-1]  # most recently stated
-        distinct = sorted({round(t.value, 2) for t in ts})
+        top = max(t.value for t in ts)
+        # values far below the others are a different quantity (a single project, a current level), not a revision
+        distinct = sorted({round(t.value, 2) for t in ts if t.value >= 0.1 * top})
         if len(distinct) > 1:
             res.signals.append(Signal(
                 key=f"{KEY}:revision:{tmetric}:{tyear}", module=KEY,
@@ -75,6 +95,31 @@ def run(ctx: AnalysisContext) -> ModuleResult:
                "(AC/DC, gross/attributable)."]
         if actual_metric != ACTUAL_FOR[tmetric][0]:
             lim.append(f"Measured against {metric_label(actual_metric)} because the more specific metric was not found.")
+        # Scale check: a target many times the company's whole current base is most likely a national goal quoted in
+        # the report. It is applied only where the base is the company's main business: total capacity targets of a
+        # real power producer (>= MIN_POWER_BASE_MW), and production / network targets measured on their own metric.
+        # Renewable targets are not scale-checked: oil, gas and coal companies build them from a tiny base (a 31 GW
+        # goal from 0.25 GW is a genuine plan); national renewable goals are filtered by wording at extraction.
+        whole_metric, whole = None, None
+        if tmetric == "capacity_target_mw" and ctx.has("installed_capacity_mw"):
+            whole_metric = "installed_capacity_mw"
+        elif tmetric not in ("renewable_target_mw", "capacity_target_mw", "capex_target_cr") and \
+                actual_metric == ACTUAL_FOR[tmetric][0]:
+            whole_metric = actual_metric
+        if whole_metric:
+            whole = ctx.latest_point(whole_metric)
+            if whole and whole_metric == "installed_capacity_mw" and whole.value < MIN_POWER_BASE_MW:
+                whole = None
+        mult = mult_whole = target.value / whole.value if whole and whole.value > 0 else 0
+        if mult_whole > TARGET_SCALE_MAX:
+            current, actual_metric = whole, whole_metric
+            row.update({"actual": fmt(current.value, current.unit) + f" ({current.period})",
+                        "status": f"Held out: {mult:.1f}x the current level"})
+            res.rows.append(row)
+            res.notes.append(f"{metric_label(tmetric)} of {fmt(target.value, target.unit)} by {tyear} is {mult:.1f}x the "
+                                f"latest {metric_label(actual_metric).lower()}; held out as it is most likely a national "
+                                "or sector goal quoted in the report, not the company's own target.")
+            continue
         if tmetric == "capex_target_cr":
             hist = calc.cagr(f"{metric_label(actual_metric)} CAGR", series)
             cur = current

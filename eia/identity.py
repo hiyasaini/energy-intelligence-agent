@@ -37,8 +37,18 @@ def load_registry(path: Path = REGISTRY) -> list[Company]:
         for r in csv.DictReader(fh):
             out.append(Company(name=r["name"].strip(), nse=r.get("nse", "").strip(), bse=r.get("bse", "").strip(),
                                aliases=[a.strip() for a in (r.get("aliases") or "").split("|") if a.strip()],
-                               segment=r.get("segment", "").strip(), website=r.get("website", "").strip()))
+                               segment=r.get("segment", "").strip(), website=r.get("website", "").strip(),
+                               eligible=not r.get("segment", "").strip().lower().startswith(NON_ENERGY)))
     return out
+
+
+NON_ENERGY = "non-energy"
+OUTSIDE_TRACK = ("Outside Track B (energy, power & renewables): only the general financial checks apply; capacity, "
+                 "production and energy-specific findings are not expected.")
+
+
+def _note(c: Company, note: str) -> Company:
+    return c.model_copy(update={"resolution_note": note + ("" if c.eligible else " " + OUTSIDE_TRACK)})
 
 
 def _norm(s: str) -> str:
@@ -81,20 +91,20 @@ def resolve(query: str, registry: Optional[list[Company]] = None) -> Resolution:
     # exact ticker
     tick = [c for c in reg if q.upper() in (c.nse.upper(), c.bse.upper()) and q.upper()]
     if len(tick) == 1:
-        c = tick[0].model_copy(update={"resolution_note": f"Exact symbol match '{q.upper()}'."})
+        c = _note(tick[0], f"Exact symbol match '{q.upper()}'.")
         return Resolution("resolved", c, [(c, 1.0)])
     scored = sorted(((c, _score(q, c)) for c in reg), key=lambda x: -x[1])
     scored = [(c, s) for c, s in scored if s >= 0.6]
     if not scored:
-        return Resolution("not_found", message=f"'{q}' is not in the registry of listed energy companies. "
+        return Resolution("not_found", message=f"'{q}' is not in the registry (listed energy companies and the NIFTY 50). "
                                                 "You may research it as an unregistered name (identity unverified).")
     top = scored[0]
     close = [x for x in scored if top[1] - x[1] < 0.08]
     if top[1] >= 0.999 and len([x for x in scored if x[1] >= 0.999]) == 1:
-        c = top[0].model_copy(update={"resolution_note": "Exact name/alias match."})
+        c = _note(top[0], "Exact name/alias match.")
         return Resolution("resolved", c, scored[:5])
     if len(close) == 1 and top[1] >= 0.85:
-        c = top[0].model_copy(update={"resolution_note": f"Best match (score {top[1]:.2f}); no close alternative."})
+        c = _note(top[0], f"Best match (score {top[1]:.2f}); no close alternative.")
         return Resolution("resolved", c, scored[:5])
     return Resolution("ambiguous", None, scored[:6],
                       f"'{q}' matches several listed companies; choose one explicitly.")

@@ -36,6 +36,74 @@ def _a(url: str, text: str, page=None) -> str:
     return f"{_e(text)} <span class='muted'>({_e(source_origin(url).lower())})</span>"
 
 
+def _discovery_md(store: Store, run_id: str) -> list[str]:
+    from .discovery import build
+    b = build(store, run_id)
+    if not b:
+        return ["## The Discovery", "", "_No finding has enough evidence to be presented as a discovery._", ""]
+    L = ["## The Discovery", "", f"**{b['discovery']}**", "",
+         f"Status **{b['status']}** · evidence strength **{b['strength']}** · {b['n_sources']} source document(s)"
+         + (" · cross-document finding" if b["non_obvious"] else ""), "", "**Why it matters**", ""]
+    L += [f"- {w}" for w in b["why"]] + ["", "**Evidence**", ""]
+    for d in b["evidence"]:
+        for it in d["items"][:4]:
+            ref = f"[{d['title']}]({it['link']})" if it["link"] else f"{d['title']} (offline document)"
+            L.append(f"- {it['metric']} {_fmt(it['value'], it['unit'])} ({it['period'] or 'no period'}) — {ref}"
+                     + (f", page {it['page']}" if it["page"] else "") + f": \"{(it['passage'] or '')[:220]}\"")
+    L += ["", f"**Timeline** (first visible: {b['emerged'] or 'n/a'})", ""] + ([b["story"], ""] if b.get("story") else [])
+    L += [f"- {t['period']}: {t['what']} ({t['source']})" for t in b["timeline"][:8]]
+    L += ["", "**Numbers**", ""]
+    L += [f"- {c['name']} = {_fmt(c['result'], c['unit'])} — `{c['formula']}`" for c in b["numbers"]] or ["- No calculation attached."]
+    if b.get("peers") and b["peers"]["rows"]:
+        pt = b["peers"]
+        L += ["", "**Company vs sector peers** (same rules, same public tables)", "",
+              "| | Company | " + " | ".join(pt["names"]) + " |", "|---|---|" + "---|" * len(pt["names"])]
+        L += [f"| {r['metric']} | {_fmt(r['company'])} | " + " | ".join(_fmt(v) for v in r["peers"]) + " |" for r in pt["rows"]]
+    if b.get("peer_check"):
+        L += ["", f"_Peer check:_ {b['peer_check']['note']}"]
+    L += ["", f"**Counterargument.** {b['counterargument']}", "", f"**Falsification condition.** {b['falsification']}", "",
+          f"**Evidence strength: {b['strength']}.**", ""] + [f"- {r}" for r in b["strength_reasons"]] + [""]
+    return L
+
+
+def _discovery_html(store: Store, run_id: str) -> str:
+    from .discovery import build
+    b = build(store, run_id)
+    if not b:
+        return "<h2>The Discovery</h2><p class='muted'>No finding has enough evidence to be presented as a discovery.</p>"
+    ev = "".join(f"<li>{_e(it['metric'])} {_e(_fmt(it['value'], it['unit']))} ({_e(it['period'] or 'no period')}): "
+                 f"{_a(d['url'], d['title'], it['page'])}{', page ' + str(it['page']) if it['page'] else ''}"
+                 f"<blockquote>{_e((it['passage'] or '')[:300])}</blockquote></li>"
+                 for d in b["evidence"] for it in d["items"][:4])
+    return ("<section class='disc'><h2>The Discovery</h2>"
+            f"<p class='lead'><b>{_e(b['discovery'])}</b></p><p class='muted'>Status {_e(b['status'])} · evidence strength "
+            f"{_e(b['strength'])} · {b['n_sources']} source document(s)</p>"
+            "<h3>Why it matters</h3><ul>" + "".join(f"<li>{_e(w)}</li>" for w in b["why"]) + "</ul>"
+            f"<h3>Evidence</h3><ul>{ev}</ul>"
+            f"<h3>Timeline</h3><ul>" + "".join(f"<li>{_e(t['period'])}: {_e(t['what'])}</li>" for t in b["timeline"][:8]) + "</ul>"
+            "<h3>Numbers</h3><ul>" + ("".join(f"<li>{_e(c['name'])} = <b>{_e(_fmt(c['result'], c['unit']))}</b> "
+                                              f"<code>{_e(c['formula'])}</code></li>" for c in b["numbers"]) or
+                                      "<li>No calculation attached.</li>") + "</ul>"
+            + _peers_html(b) +
+            f"<h3>Counterargument</h3><p>{_e(b['counterargument'])}</p>"
+            f"<h3>Falsification condition</h3><p>{_e(b['falsification'])}</p>"
+            f"<h3>Evidence strength: {_e(b['strength'])}</h3><ul>" +
+            "".join(f"<li>{_e(r)}</li>" for r in b["strength_reasons"]) + "</ul></section>")
+
+
+def _peers_html(b: dict) -> str:
+    pt = b.get("peers")
+    out = ""
+    if pt and pt["rows"]:
+        out += ("<h3>Company vs sector peers</h3><table><tr><th></th><th>Company</th>" +
+                "".join(f"<th>{_e(n)}</th>" for n in pt["names"]) + "</tr>" +
+                "".join(f"<tr><td>{_e(r['metric'])}</td><td><b>{_e(_fmt(r['company']))}</b></td>" +
+                        "".join(f"<td>{_e(_fmt(v))}</td>" for v in r["peers"]) + "</tr>" for r in pt["rows"]) + "</table>")
+    if b.get("peer_check"):
+        out += f"<p><i>Peer check:</i> {_e(b['peer_check']['note'])}</p>"
+    return out
+
+
 def build_markdown(store: Store, run_id: str, max_findings: int = 25) -> str:
     s = run_summary(store, run_id)
     run, co = s["run"], s["company"]
@@ -51,7 +119,7 @@ def build_markdown(store: Store, run_id: str, max_findings: int = 25) -> str:
           f"started {run.started_at} · finished {run.finished_at or 'n/a'}",
           f"- **Providers:** search `{run.settings.get('search_provider')}`, LLM `{run.settings.get('llm_provider')}`",
           f"- **Generated:** {datetime.now(timezone.utc).isoformat(timespec='seconds')}", "",
-          f"_{DISCLAIMER}_", "", "## Discovery summary", "",
+          f"_{DISCLAIMER}_", ""] + _discovery_md(store, run_id) + ["## Research summary", "",
           f"- Sources parsed: **{s['sources_ok']}** of {s['sources_total']} attempted ({s['sources_failed']} failed)",
           f"- Facts extracted: **{s['facts']}** ({s['facts_verified']} verified verbatim in their source passage); "
           f"{s['targets']} targets, {s['events']} dated events",
@@ -168,7 +236,8 @@ def build_html(store: Store, run_id: str, max_findings: int = 25) -> str:
              f"mode {_e(run.mode)} · status {_e(run.status)} · {run.rounds_completed} round(s) · search "
              f"{_e(run.settings.get('search_provider'))} · LLM {_e(run.settings.get('llm_provider'))}</p>"
              f"<p class='muted'>{_e(co.resolution_note)}</p><p><em>{_e(DISCLAIMER)}</em></p>")
-    H.append("<h2>Discovery summary</h2><ul>"
+    H.append(_discovery_html(store, run_id))
+    H.append("<h2>Research summary</h2><ul>"
              f"<li>Sources parsed: <b>{s['sources_ok']}</b> of {s['sources_total']} ({s['sources_failed']} failed)</li>"
              f"<li>Facts: <b>{s['facts']}</b> ({s['facts_verified']} verified verbatim); {s['targets']} targets; "
              f"{s['events']} dated events</li><li>Periods: {_e(', '.join(s['periods_covered']) or 'none')}</li>"

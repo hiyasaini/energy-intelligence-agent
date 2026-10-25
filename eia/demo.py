@@ -153,6 +153,33 @@ class SyntheticFetcher:
         return FetchResult(url, False, error="not in synthetic corpus")
 
 
+# Two fictitious peers (synthetic tables, read with the same extraction rules) so the peer check is visible offline.
+DEMO_PEERS = {
+    "DEMO-PEER-A": ("Demo Peer Alpha Power Ltd (synthetic)",
+                    "Consolidated Figures in Rs. Crores\nMar 2022   Mar 2023   Mar 2024   Mar 2025\n"
+                    "Sales +   3,000   3,300   3,650   4,000\nOperating Profit   2,100   2,300   2,550   2,800\n"
+                    "Interest   420   440   460   480\nBorrowings +   9,500   10,200   11,000   11,800\n"
+                    "Cash from Operating Activity +   1,900   2,050   2,300   2,500\n"),
+    "DEMO-PEER-B": ("Demo Peer Beta Renewables Ltd (synthetic)",
+                    "Consolidated Figures in Rs. Crores\nMar 2022   Mar 2023   Mar 2024   Mar 2025\n"
+                    "Sales +   1,800   2,100   2,400   2,750\nOperating Profit   1,300   1,500   1,720   1,950\n"
+                    "Interest   300   320   340   350\nBorrowings +   7,000   7,600   8,300   9,000\n"
+                    "Cash from Operating Activity +   1,150   1,300   1,500   1,700\n"),
+}
+
+
+def demo_peers() -> list:
+    from .extraction.documents import parse_bytes
+    from .extraction.rules import ExtractionContext, extract_document
+    from .peers import PeerProfile, profile
+    out = []
+    for sym, (name, text) in DEMO_PEERS.items():
+        doc = parse_bytes(text.encode(), "text/plain", f"synthetic://peers/{sym}.txt")
+        facts = extract_document(doc, ExtractionContext(f"peer:{sym}", f"peer:{sym}", is_synthetic=True))
+        out.append(PeerProfile(sym, name, f"synthetic://peers/{sym}.txt", profile(facts)))
+    return out
+
+
 def run_demo(store, settings=None, progress=None, max_rounds: Optional[int] = None):
     """Run the full pipeline on the synthetic company. Returns RunOutcome."""
     from .agent import ResearchAgent
@@ -162,4 +189,7 @@ def run_demo(store, settings=None, progress=None, max_rounds: Optional[int] = No
     s = settings or get_settings()
     agent = ResearchAgent(store, s, search=demo_search(), llm=NullLLM(), fetcher=SyntheticFetcher(),
                           progress=progress, today=date(2025, 8, 15))
-    return agent.research(DEMO_COMPANY, mode="demo", max_rounds=max_rounds or 3)
+    agent.peer_profiles = demo_peers()
+    out = agent.research(DEMO_COMPANY, mode="demo", max_rounds=max_rounds or 3)
+    store.save_peers(out.run_id, agent.peer_profiles)
+    return out

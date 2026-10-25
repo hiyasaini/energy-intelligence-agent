@@ -72,8 +72,8 @@ def main() -> int:
     if a.out:
         od = Path(a.out)
         od.mkdir(parents=True, exist_ok=True)
-        (od / f"{out.run_id}.md").write_text(build_markdown(store, out.run_id))
-        (od / f"{out.run_id}.html").write_text(build_html(store, out.run_id))
+        (od / f"{out.run_id}.md").write_text(build_markdown(store, out.run_id), encoding="utf-8")
+        (od / f"{out.run_id}.html").write_text(build_html(store, out.run_id), encoding="utf-8")
         print(f"Reports written to {od}/{out.run_id}.md and .html")
     return 0
 

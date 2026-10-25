@@ -103,6 +103,7 @@ class ResearchAgent:
         self._seen_hashes: set[str] = set()
         self._queries_run: set[str] = set()
         self.errors: list[str] = []
+        self.peer_profiles: list = []
 
     # -- logging ------------------------------------------------------------------------------
     def log(self, stage: str, msg: str, level: str = "info", rnd: int = 0, frac: float = -1) -> None:
@@ -146,6 +147,7 @@ class ResearchAgent:
                         self._ingest_seed(d, rnd)
                     if self.direct and mode == "live":
                         self._ingest_direct(company, rnd)
+                        self._collect_peers(company, rnd)
                     for u in seed_urls or []:
                         self._ingest_url(u, title=u, purpose="manual", rnd=rnd, query="(user supplied)", company=company)
                 self.log("plan", f"Round {rnd}: {len(queries)} research question(s) planned.", rnd=rnd,
@@ -410,7 +412,12 @@ class ResearchAgent:
         self.store.save_pages(self.run.id, src.id, [(pg.number, pg.text) for pg in doc.pages if pg.text.strip()])
         for w in doc.warnings:
             self.log("parse", f"{src.title or src.url}: {w}", "warning", rnd)
-        ectx = ExtractionContext(self.run.id, src.id, is_synthetic=src.tier == SourceTier.synthetic)
+        co = self.run.company
+        words = tuple(w for w in [co.nse, *(co.name or "").replace(" Ltd", "").split()[:1],
+                                  *[a.strip() for a in (co.aliases or [])]]
+                      if w and len(w) >= 3 and w.lower() not in ("the", "indian", "india", "national"))
+        ectx = ExtractionContext(self.run.id, src.id, is_synthetic=src.tier == SourceTier.synthetic,
+                                 scope_hint=f"{src.url} {src.title}", company_words=words)
         try:
             facts = extract_document(doc, ectx)
         except Exception as e:
@@ -459,7 +466,33 @@ class ResearchAgent:
     # -- analysis -------------------------------------------------------------------------------
     def _context(self, company: Company) -> AnalysisContext:
         assert self.run
-        return AnalysisContext(self.run.id, company, self.store.facts(self.run.id), self.store.sources(self.run.id))
+        ctx = AnalysisContext(self.run.id, company, self.store.facts(self.run.id), self.store.sources(self.run.id))
+        ctx.peers = self.peer_profiles
+        return ctx
+
+    def _collect_peers(self, company: Company, rnd: int) -> None:
+        """Same-sector listed peers, read with the same rules, to tell company stories from sector stories."""
+        if self.settings.peers <= 0:
+            return
+        from .identity import load_registry
+        from .peers import collect
+
+        def extract(doc, sym):
+            return extract_document(doc, ExtractionContext(f"peer:{sym}", f"peer:{sym}", scope_hint="/consolidated/"))
+        try:
+            self.peer_profiles = collect(company, load_registry(), self.fetcher.fetch,
+                                         lambda b, ct, u: parse_bytes(b, ct, u, 40), extract, self.settings.peers)
+        except Exception as e:  # peers are optional evidence; never stop the run
+            self.log("peers", f"Peer comparison skipped: {type(e).__name__}: {str(e)[:120]}", "warning", rnd)
+            return
+        ok = [p for p in self.peer_profiles if not p.error]
+        if self.peer_profiles:
+            self.log("peers", f"Peer comparison: {', '.join(p.name for p in ok) or 'none readable'}"
+                     + (f" ({len(self.peer_profiles) - len(ok)} unavailable)" if len(ok) < len(self.peer_profiles) else "")
+                     + ".", rnd=rnd)
+        else:
+            self.log("peers", "No same-sector peers in the registry; peer comparison not available.", rnd=rnd)
+        self.store.save_peers(self.run.id, self.peer_profiles)
 
     def _analyse(self, company: Company, rnd: int):
         assert self.run
