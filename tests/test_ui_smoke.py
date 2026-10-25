@@ -154,7 +154,8 @@ class FakeSt:
         return v
 
     def slider(self, label, lo, hi, value=None, key=None, help=None): return self._widget(key, value)
-    def text_input(self, label, placeholder="", key=None, label_visibility="visible", on_change=None, help=None):
+    def text_input(self, label, placeholder="", key=None, label_visibility="visible", on_change=None, help=None,
+                   args=(), kwargs=None):
         self.callbacks[key] = on_change
         return self._widget(key, "")
 
@@ -286,8 +287,13 @@ def test_demo_lands_on_overview_with_every_panel(env, monkeypatch):
                   "Agent verdict", "Project pipeline and ESG", "Recent headlines", "Market price", "52-week range",
                   "eia-co", "eia-hero", "Research progress", "Sources analysed", "Key highlights",
                   "Evidence confidence", "Overall outlook", "Financial and operational trends", "Energy mix",
-                  "Emissions and sustainability", "Top findings", "Discovery graph", "Recent timeline"):
+                  "Emissions and sustainability", "Top findings", "Discovery graph", "Recent timeline",
+                  "THE DISCOVERY", "Why it matters", "Evidence strength", "Strongest counterargument",
+                  "Falsification condition", "Numbers", "Timeline", "source document(s)"):
         assert piece in body, piece
+    # the discovery's evidence links to the source, and other findings can be opened in its place
+    assert any((b["key"] or "").startswith("view_disc_") for b in fake.buttons)
+    assert any((b["key"] or "").startswith("disc_alt_") for b in fake.buttons)
     assert fake.calls.count("plotly_chart") >= 7  # financial, map, gauge, trends, mix, esg, graph
     nav = [b for b in fake.buttons if (b["key"] or "").startswith("nav_")]
     assert len(nav) == 14

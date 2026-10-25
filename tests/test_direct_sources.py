@@ -1,6 +1,8 @@
 """Key-free exchange sources: parsing of NSE API payloads and agent ingestion, with fakes (no network)."""
 from datetime import date
 
+import pytest
+
 from eia.agent import ResearchAgent
 from eia.config import get_settings
 from eia.db import Store
@@ -83,7 +85,7 @@ def test_live_run_without_any_api_key_reads_exchange_sources():
 def test_zip_annual_report_is_unpacked():
     import io
     import zipfile
-    from reportlab.pdfgen import canvas
+    canvas = pytest.importorskip("reportlab.pdfgen.canvas", reason="reportlab not installed")
     from eia.extraction.documents import parse_bytes
     pdf = io.BytesIO()
     c = canvas.Canvas(pdf)

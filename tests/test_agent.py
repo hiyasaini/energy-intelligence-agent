@@ -116,3 +116,22 @@ def test_identity_resolution_is_safe():
     amb = resolve("Adani")
     assert amb.status == "ambiguous" and len(amb.candidates) >= 2
     assert resolve("Totally Unknown Widgets").status == "not_found"
+
+
+def test_every_nifty50_track_b_company_resolves_and_others_are_flagged():
+    from eia.identity import resolve
+    for q in ("NTPC", "Power Grid", "ONGC", "Coal India", "Reliance"):
+        r = resolve(q)
+        assert r.status == "resolved" and r.company.eligible, q
+    for q in ("HDFC Bank", "Infosys", "M&M", "L&T"):
+        r = resolve(q)
+        assert r.status == "resolved" and not r.company.eligible and "Outside Track B" in r.company.resolution_note
+    assert resolve("Adani").status == "ambiguous"     # never guesses between group companies
+
+
+def test_non_energy_companies_get_no_energy_peers():
+    from eia.identity import load_registry
+    from eia.peers import choose_peers, family
+    reg = load_registry()
+    steel = next(c for c in reg if c.nse == "TATASTEEL")
+    assert family(steel.segment) == "" and choose_peers(steel, reg) == []

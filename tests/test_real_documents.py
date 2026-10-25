@@ -30,6 +30,12 @@ SETS = {
 }
 
 
+def test_regression_runs_are_offline():
+    """Module fixtures run before per-test fixtures: the session itself must be offline."""
+    s = get_settings()
+    assert not s.direct_sources and s.search_provider == "none"
+
+
 @pytest.fixture(scope="module")
 def runs():
     out = {}

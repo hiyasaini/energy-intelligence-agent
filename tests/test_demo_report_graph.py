@@ -91,7 +91,7 @@ def test_no_company_specific_findings_in_live_code():
     for p in (ROOT / "eia").rglob("*.py"):
         if p.name == "demo.py":
             continue
-        text = p.read_text()
+        text = p.read_text(encoding="utf-8")
         for n in names:
             assert not re.search(rf"\b{n}\b", text), f"{n} found in {p}"
 
@@ -107,3 +107,33 @@ def test_document_text_is_stored_for_the_viewer(demo):
     st, out = demo
     for s in st.sources(out.run_id):
         assert st.pages(s.id), s.title
+
+
+def test_discovery_brief_has_every_required_element(demo):
+    from eia import discovery
+    st, out = demo
+    b = discovery.build(st, out.run_id)
+    assert b["discovery"].endswith(".") and len(b["discovery"]) > 20          # 1. one sentence
+    assert 3 <= len(b["why"]) <= 5                                           # 2. why it matters
+    assert b["evidence"] and all(d["items"] for d in b["evidence"])         # 3. evidence with sources
+    assert b["timeline"] and b["emerged"]                                    # 4. timeline
+    assert all(c["result"] is not None for c in b["numbers"])               # 5. numbers
+    assert b["counterargument"] and b["falsification"] != "n/a"             # 6, 7
+    assert b["strength"] in ("strong", "moderate", "weak") and b["strength_reasons"]  # 8
+    assert b["hypothesis"].status.value != "rejected"
+
+
+def test_discovery_prefers_cross_document_findings(demo):
+    from eia import discovery
+    st, out = demo
+    b = discovery.build(st, out.run_id)
+    assert b["non_obvious"] and b["n_sources"] >= 2
+
+
+def test_report_opens_with_the_discovery(demo):
+    st, out = demo
+    md = build_markdown(st, out.run_id)
+    assert md.index("## The Discovery") < md.index("## Module overview")
+    for piece in ("**Why it matters**", "**Counterargument.**", "**Falsification condition.**", "**Evidence strength"):
+        assert piece in md
+    assert "<h2>The Discovery</h2>" in build_html(st, out.run_id)

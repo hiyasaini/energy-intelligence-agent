@@ -21,7 +21,7 @@ ROOT = Path(__file__).resolve().parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from eia import views  # noqa: E402
+from eia import assistant, views  # noqa: E402
 from eia.agent import ResearchAgent, SeedDocument  # noqa: E402
 from eia.config import get_settings  # noqa: E402
 from eia.db import Store  # noqa: E402
@@ -35,7 +35,7 @@ from eia.providers.market import NIFTY50, fetch_chart, fetch_quote, relative_per
 from eia.report import build_html, build_markdown  # noqa: E402
 from eia.schema import RelLabel  # noqa: E402
 from eia.verification import status_label  # noqa: E402
-from ui.theme import (C_AQUA, C_BLUE, C_GREY, C_ORANGE, AMBER, BLUE, CORAL, CSS, CYAN, GREEN, MUTED, ORANGE, PLOTLY_CONFIG, PLOTLY_LAYOUT,  # noqa: E402
+from ui.theme import (CHART_FONT, MINT, TEAL_HI, C_AQUA, C_BLUE, C_GREY, C_ORANGE, AMBER, BLUE, CORAL, CSS, CYAN, GREEN, MUTED, ORANGE, PLOTLY_CONFIG, PLOTLY_LAYOUT,  # noqa: E402
                       SERIES_COLORS, SKYLINE, SOURCE_COLORS, VIOLET, direction_tag, esc, gauge, highlight, minibars,
                       module_chip, nav_css, page_header, ptitle, ring, section, sparkline, stat_strip, status_chip,
                       status_color, strength_chip)
@@ -63,9 +63,13 @@ PAGE_HELP = {
     "Hidden Connections": "Links between events and metrics where the evidence supports them. Never read as causation.",
     "Early Warning": "Trend reversals, sharp decelerations and margin compression.",
 }
+UNIT_LABEL = {"Mt": "Mt", "Mtoe": "Mtoe", "BCM": "BCM", "ckm": "ckm", "MVA": "MVA", "MU": "MU", "MW": "MW"}
 MODULE_CHARTS = {
-    "promise_reality": ["renewable_capacity_mw", "installed_capacity_mw", "capacity_under_construction_mw"],
-    "green_growth": ["renewable_capacity_mw", "installed_capacity_mw", "generation_mu", "revenue_cr"],
+    "promise_reality": ["renewable_capacity_mw", "installed_capacity_mw", "capacity_under_construction_mw",
+                        "coal_production_mt", "oil_gas_production_mtoe", "transmission_ckm", "transformation_mva"],
+    "green_growth": ["renewable_capacity_mw", "installed_capacity_mw", "generation_mu", "revenue_cr",
+                     "coal_production_mt", "coal_offtake_mt", "oil_gas_production_mtoe", "crude_production_mt",
+                     "gas_production_bcm", "refinery_throughput_mt", "transmission_ckm", "transformation_mva"],
     "capital_cash": ["capex_cr", "cfo_cr", "gross_debt_cr", "net_debt_cr", "ebitda_cr", "finance_cost_cr"],
     "hidden_risk": ["receivables_cr", "revenue_cr", "cfo_cr"],
     "hidden_connections": ["generation_mu", "revenue_cr", "gross_debt_cr", "finance_cost_cr"],
@@ -73,7 +77,9 @@ MODULE_CHARTS = {
 }
 TREND_METRICS = {"Revenue": "revenue_cr", "Net profit": "pat_cr", "EBITDA": "ebitda_cr", "Capacity": "_capacity",
                  "Generation": "generation_mu", "Capex": "capex_cr", "Debt": "gross_debt_cr"}
-UNIT_NAMES = {"INR_cr": "₹ crore", "MW": "MW", "MU": "million units", "%": "%", "x": "times", "tCO2/MWh": "tCO2/MWh"}
+UNIT_NAMES = {"INR_cr": "₹ crore", "MW": "MW", "MU": "million units", "%": "%", "x": "times", "tCO2/MWh": "tCO2/MWh",
+              "Mt": "million tonnes", "Mtoe": "million tonnes oil equivalent", "BCM": "billion cubic metres",
+              "ckm": "circuit km", "MVA": "MVA"}
 
 
 # ------------------------------------------------------------------------------------------------
@@ -125,7 +131,8 @@ def html(s: str) -> None:
 def fmt_val(v, unit: str) -> str:
     if v is None or (isinstance(v, float) and v != v):
         return "n/a"
-    u = {"INR_cr": " ₹ cr", "MW": " MW", "MU": " MU", "%": "%", "x": "x", "tCO2/MWh": " tCO2/MWh"}.get(unit, f" {unit}" if unit else "")
+    u = {"INR_cr": " ₹ cr", "MW": " MW", "MU": " MU", "%": "%", "x": "x", "tCO2/MWh": " tCO2/MWh"}.get(
+        unit, f" {unit.replace('INR_cr', '₹ cr')}" if unit else "")
     if abs(v) >= 1000:
         return f"{v:,.0f}{u}"
     return f"{v:,.3f}{u}" if abs(v) < 1 else f"{v:,.2f}{u}"
@@ -148,10 +155,17 @@ def chart(fig, title: str = "", height: int = 320, key: str = "") -> None:
     fig.update_layout(**PLOTLY_LAYOUT, height=height)
     if not isinstance(fig.data[0] if fig.data else None, (go.Pie, go.Indicator, go.Scattergeo)):
         # subplot axes (xaxis2, yaxis2, ...) do not pick up the layout defaults, so style them all here
-        fig.update_xaxes(gridcolor="rgba(0,0,0,0)", linecolor="#1E2D48", automargin=True,
-                         tickfont=dict(color=MUTED, size=11))
-        fig.update_yaxes(gridcolor="#18253D", linecolor="rgba(0,0,0,0)", automargin=True,
-                         tickfont=dict(color=MUTED, size=11), title_font=dict(color=MUTED, size=11))
+        fig.update_xaxes(gridcolor="rgba(0,0,0,0)", linecolor="#24344C", automargin=True, ticks="outside", ticklen=4,
+                         tickcolor="#24344C", tickfont=dict(color=MUTED, size=10, family=CHART_FONT))
+        fig.update_yaxes(gridcolor="#152236", griddash="dot", linecolor="rgba(0,0,0,0)", automargin=True,
+                         tickfont=dict(color=MUTED, size=10, family=CHART_FONT),
+                         title_font=dict(color=MUTED, size=10, family=CHART_FONT))
+        # instrument-style lines: hollow markers ringed in the series colour
+        for tr in fig.data:
+            if isinstance(tr, go.Scatter) and tr.mode and "lines" in tr.mode and "markers" in tr.mode:
+                c = tr.line.color if tr.line and tr.line.color else None
+                if c and isinstance(c, str):
+                    tr.update(marker=dict(color="#05080E", size=8, line=dict(color=c, width=2)))
     if title:  # titled charts keep the legend underneath so the two never overlap
         fig.update_layout(title=dict(text=title, x=0.01, y=0.97), margin=dict(t=48),
                           legend=dict(orientation="h", yanchor="top", y=-0.14, x=0))
@@ -170,6 +184,10 @@ def run_banner(store: Store, rid: str) -> None:
     if run and run.mode == "demo":
         html("<div class='eia-banner demo'><b>Demo mode, synthetic data.</b> Aurora Grid Renewables is a fictitious "
              "company and every figure is invented to show how the agent works.</div>")
+    if run and not run.company.eligible:
+        html(f"<div class='eia-banner demo'><b>{esc(run.company.name)} is outside Track B.</b> The agent ran its general "
+             "financial checks (growth, leverage, cash and early warnings; no energy peers). Capacity, production "
+             "and energy-specific findings are not expected for this company.</div>")
 
 
 def need_run(store: Store) -> str | None:
@@ -241,8 +259,9 @@ def top_bar() -> None:
     if st.session_state.get("mode") not in ("Live research", "Demo mode"):
         st.session_state["mode"] = "Live research"
     active = "mode_live" if st.session_state["mode"] == "Live research" else "mode_demo"
-    html(f"<style>.st-key-{active} button {{ background: #0B3550 !important; border-color: {CYAN} !important; "
-         f"color: #FFFFFF !important; }}</style>")
+    html(f"<style>.st-key-{active} button {{ background: rgba(53,224,240,.14) !important; border-color: {CYAN} !important; "
+         f"color: #FFFFFF !important; box-shadow: 0 0 16px -4px {CYAN} !important; }}"
+         f".st-key-{active} button p::before {{ content: '● '; color: {GREEN}; }}</style>")
     m1, m2 = c3.columns(2)
     m1.button("Live research", key="mode_live", on_click=_set_mode, args=("Live research",))
     m2.button("Demo mode", key="mode_demo", on_click=_set_mode, args=("Demo mode",))
@@ -376,18 +395,215 @@ def page_overview(store: Store) -> None:
                                                         or s["facts"] == 0 or mods_with_data == 0):
         empty_run_help(store, rid, run)
     header_strip(store, rid, run)
-    t_dash, t_research, t_metrics, t_dev, t_ins = st.tabs(
-        ["Dashboard", "Research summary", "Key metrics", "Latest developments", "Insights"])
-    with t_dash:
-        overview_dashboard(store, rid, run)
-    with t_research:
-        overview_executive(store, rid, run)
-    with t_metrics:
-        overview_metrics(store, rid)
-    with t_dev:
-        overview_developments(store, rid)
-    with t_ins:
-        overview_insights(store, rid)
+    kpi_bar(store, rid)
+    main_col, side_col = st.columns([3, 1.1], gap="medium")
+    with main_col:
+        t_disc, t_dash, t_research, t_metrics, t_dev, t_ins = st.tabs(
+            ["Discovery", "Dashboard", "Research summary", "Key metrics", "Latest developments", "Insights"])
+        with t_disc:
+            overview_discovery(store, rid, run)
+        with t_dash:
+            overview_dashboard(store, rid, run)
+        with t_research:
+            overview_executive(store, rid, run)
+        with t_metrics:
+            overview_metrics(store, rid)
+        with t_dev:
+            overview_developments(store, rid)
+        with t_ins:
+            overview_insights(store, rid)
+    with side_col:
+        assistant_panel(store, rid, run)
+
+
+# ---- top metrics bar --------------------------------------------------------------------------------
+
+def _pill(change, good_when_up: bool = True) -> str:
+    if change is None:
+        return ""
+    if abs(change) < 0.05:
+        return "<span class='eia-pill flat'>0.0%</span>"
+    good = (change > 0) == good_when_up
+    return f"<span class='eia-pill {'up' if good else 'down'}'>{'▲' if change > 0 else '▼'} {abs(change):.1f}% YoY</span>"
+
+
+def _kpi_icon(ch: str, color: str) -> str:
+    return (f"<span class='ic' style='background:{_rgba(color, .14)};color:{color};"
+            f"box-shadow:0 0 18px -4px {_rgba(color, .7)}'>{ch}</span>")
+
+
+def _kpi_value(pts: list[dict]) -> str:
+    if not pts:
+        return "n/a"
+    v = pts[-1]["value"]
+    return f"₹{fmt_inr(v)}<small>Cr</small>" if abs(v) < 1e5 else f"₹{v / 1e5:,.2f}<small>lakh Cr</small>"
+
+
+def kpi_bar(store: Store, rid: str) -> None:
+    """Four headline figures, each straight from the run's verified series (never placeholders)."""
+    rev, ebitda, debt = (views.trend(store, rid, m) for m in ("revenue_cr", "ebitda_cr", "gross_debt_cr"))
+    ec = views.evidence_confidence(store, rid)
+    cols = st.columns(4)
+    with cols[0], panel("kpi_rev", 150):
+        html(f"<div class='eia-k'><div class='top'><span class='lb'>Revenue from operations</span>{_kpi_icon('₹', CYAN)}</div>"
+             f"<div class='v'>{_kpi_value(rev)}</div><div class='ft'>{_pill(rev[-1]['yoy']) if rev else ''}"
+             f"<span>{esc(rev[-1]['period']) if rev else 'not found in the sources'}</span></div></div>")
+    with cols[1], panel("kpi_conf", 150):
+        html(f"<div class='eia-k'><div class='row'>{ring(ec['pct'], CYAN, 84, MINT)}<div>"
+             f"<div class='lb'>Evidence confidence</div><div class='v' style='font-size:1.15rem'>"
+             f"{ec['strong'] + ec['moderate']} of {ec['total']}</div><div class='ft'>findings backed by strong or "
+             f"moderate evidence</div></div></div></div>")
+    with cols[2], panel("kpi_debt", 150):
+        html(f"<div class='eia-k'><div class='top'><span class='lb'>Gross debt</span>{_kpi_icon('◆', VIOLET)}</div>"
+             f"<div class='v'>{_kpi_value(debt)}</div><div class='ft'>{_pill(debt[-1]['yoy'], False) if debt else ''}"
+             f"<span>{esc(debt[-1]['period']) if debt else 'not found in the sources'}</span></div></div>")
+    with cols[3], panel("kpi_ebitda", 150):
+        margin = (ebitda[-1]["value"] / rev[-1]["value"] * 100 if ebitda and rev and rev[-1]["value"] and
+                  ebitda[-1]["period"] == rev[-1]["period"] else None)
+        html(f"<div class='eia-k'><div class='top'><span class='lb'>EBITDA</span>{_kpi_icon('↗', BLUE)}</div>"
+             f"<div class='v'>{_kpi_value(ebitda)}</div>"
+             f"<div style='margin:-2px 0 2px'>{sparkline([p['value'] for p in ebitda[-8:]], BLUE, 150, 30)}</div>"
+             f"<div class='ft'>{_pill(ebitda[-1]['yoy']) if ebitda else ''}"
+             f"<span>{(f'margin {margin:.1f}% · ' if margin is not None and -100 <= margin <= 100 else '') + (esc(ebitda[-1]['period']) if ebitda else 'not found')}"
+             f"</span></div></div>")
+
+
+# ---- AI assistant -----------------------------------------------------------------------------------
+
+def _md_bold(text: str) -> str:
+    return re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", esc(text)).replace("\n\n", "<br><br>")
+
+
+def _ask(rid: str, q: str | None = None) -> None:
+    q = (q if q is not None else st.session_state.get("chat_q", "")).strip()
+    if not q:
+        return
+    a = assistant.answer(get_store(), rid, q)
+    st.session_state.setdefault("chat", {}).setdefault(rid, []).extend([("user", q), ("ai", a.text)])
+    st.session_state["chat_q"] = ""
+
+
+def assistant_panel(store: Store, rid: str, run) -> None:
+    with panel("chat"):
+        html("<div class='eia-ai-head'><div class='av'>AI</div><div><div class='t'>AI RESEARCH ASSISTANT</div>"
+             "<div class='s'>Answers only from this run's evidence</div></div></div>")
+        hist = st.session_state.setdefault("chat", {}).setdefault(rid, [])
+        brief = assistant.briefing(store, rid).text
+        if hist:   # once a question is asked, keep the opening short so the latest answer stays in view
+            brief = brief.split(". The lead discovery")[0] + "."
+        msgs = [("ai", brief)] + hist[-4:]
+        body = ""
+        for who, text in msgs:
+            if who == "user":
+                body += f"<div class='eia-msg user'><div class='b'>{esc(text)}</div></div>"
+            else:
+                body += f"<div class='eia-msg ai'><div class='b'>{_md_bold(text)}</div></div>"
+        html(body)
+        sug = [q for q in assistant.SUGGESTIONS if q not in [t for w, t in hist if w == "user"]][:3]
+        for i, q in enumerate(sug):
+            st.button(q, key=f"chatsug_{i}", on_click=_ask, args=(rid, q))
+        a, b = st.columns([5, 1.2], vertical_alignment="center")
+        a.text_input("Ask the agent", placeholder="Type your query or analysis request...", key="chat_q",
+                     label_visibility="collapsed", on_change=_ask, args=(rid,))
+        b.button("➤", key="chat_send", type="primary", on_click=_ask, args=(rid,), help="Send")
+        st.caption("No language model: replies quote the run's findings and figures, with their verification status.")
+
+
+def _pick_discovery(hid: str) -> None:
+    st.session_state["disc_pick"] = hid
+
+
+def overview_discovery(store: Store, rid: str, run) -> None:
+    """The brief's eight required elements for the agent's strongest finding, on one screen."""
+    from eia import discovery
+    pick = st.session_state.get("disc_pick")
+    b = discovery.build(store, rid, pick) or discovery.build(store, rid)
+    if not b:
+        html("<div class='eia-empty'>No finding survived to a discovery yet: the sources did not contain enough "
+             "evidence. Open the Discovery Feed to see what was tested.</div>")
+        return
+    h = b["hypothesis"]
+    tag = ("<span class='eia-tag' style='border-color:#0E7490;color:#7DE3F4'>Cross-document finding</span>"
+           if b["non_obvious"] else "")
+    html(f"<div class='eia-disc'><div class='k'>THE DISCOVERY · {esc(run.company.name.upper())}</div>"
+         f"<div class='h'>{esc(b['discovery'])}</div>"
+         f"<div class='m'>{status_chip(b['status'])} {strength_chip(b['strength'])} {direction_tag(b['direction'])} "
+         f"{tag}<span class='eia-faint'>{esc(h.title)}</span></div></div>")
+    c1, c2 = st.columns([1.15, 1])
+    with c1, panel("disc_why"):
+        html(ptitle("Why it matters") + "<ul class='eia-why'>" + "".join(f"<li>{esc(w)}</li>" for w in b["why"]) + "</ul>")
+    with c2, panel("disc_strength"):
+        html(ptitle("Evidence strength", strength_chip(b["strength"])) + "<ul class='eia-why'>" +
+             "".join(f"<li>{esc(r)}</li>" for r in b["strength_reasons"]) + "</ul>")
+    c1, c2 = st.columns(2)
+    with c1, panel("disc_counter"):
+        html(ptitle("Strongest counterargument") + f"<div class='eia-callout warn'>{esc(b['counterargument'])}</div>")
+    with c2, panel("disc_fals"):
+        html(ptitle("Falsification condition") + f"<div class='eia-callout'>{esc(b['falsification'])}</div>")
+    pt = b.get("peers")
+    with panel("disc_peers"):
+        html(ptitle("Company vs sector peers", "<span class='eia-faint'>same rules, same public tables</span>"))
+        if b.get("peer_check"):
+            pc = b["peer_check"]
+            cls = "warn" if pc["effect"] == "opposes" else ""
+            html(f"<div class='eia-callout {cls}' style='margin-bottom:10px'>{esc(pc['note'])}</div>")
+        if not pt:
+            html("<div class='eia-empty'>Peers are compared in live research runs (not in demo mode or for uploaded "
+                 "documents only).</div>")
+        elif not pt["rows"]:
+            html("<div class='eia-empty'>No comparable figures were found for the peers"
+                 + (f": {esc('; '.join(pt['unavailable']))}" if pt["unavailable"] else "") + ".</div>")
+        else:
+            def cell(v):
+                return "<td style='text-align:right'>" + (f"{v:,.2f}" if v is not None else "<span class='eia-faint'>n/a</span>") + "</td>"
+            head = "".join(f"<th style='text-align:right'>{esc(n.replace(' Ltd', '')[:22])}</th>" for n in pt["names"])
+            body = "".join(f"<tr><td>{esc(r['metric'])}</td>{cell(r['company'])}{''.join(cell(v) for v in r['peers'])}</tr>"
+                           for r in pt["rows"])
+            html(f"<table class='eia-ptable'><tr><th></th><th style='text-align:right;color:#22C7E8'>"
+                 f"{esc(run.company.name.replace(' Ltd', '')[:22])}</th>{head}</tr>{body}</table>"
+                 + (f"<div class='eia-faint' style='margin-top:6px'>Unavailable: {esc('; '.join(pt['unavailable']))}</div>"
+                    if pt["unavailable"] else ""))
+    c1, c2 = st.columns([1, 1])
+    with c1, panel("disc_numbers"):
+        html(ptitle("Numbers", "<span class='eia-faint'>calculated in code</span>"))
+        if not b["numbers"]:
+            html("<div class='eia-empty'>This finding rests on reported figures; no calculation is attached.</div>")
+        for c in b["numbers"]:
+            ins = ", ".join(f"{k} = {v:,.2f}" if isinstance(v, (int, float)) else f"{k} = {v}" for k, v in c["inputs"].items())
+            html(f"<div class='eia-calc'><b>{esc(c['name'])}</b> = <b style='color:#22C7E8'>{esc(fmt_val(c['result'], c['unit']))}</b>"
+                 f"<div class='eia-faint'>{esc(c['formula'])} · {esc(ins)}</div></div>")
+    with c2, panel("disc_timeline"):
+        html(ptitle("Timeline", f"<span class='eia-faint'>first visible: {esc(b['emerged'] or 'n/a')}</span>"))
+        if b.get("story"):
+            html(f"<div class='eia-callout' style='margin-bottom:10px'>{esc(b['story'])}</div>")
+        if not b["timeline"]:
+            html("<div class='eia-empty'>The supporting facts carry no period.</div>")
+        html("<div class='eia-tl'>" + "".join(
+            f"<div class='row'><span class='dt'>{esc(t['period'])}</span><span class='dot'></span>"
+            f"<span class='tx'>{esc(t['what'])}<br><span class='eia-faint'>{esc(t['source'][:70])}"
+            f"{', p.' + str(t['page']) if t['page'] else ''}</span></span></div>" for t in b["timeline"][:8]) + "</div>")
+    html(section(f"Evidence: {b['n_sources']} source document(s)" +
+                 (" · single source, so treat with care" if b["single_source"] else "")))
+    for i, d in enumerate(b["evidence"]):
+        with panel(f"disc_ev_{i}"):
+            html(f"<div class='eia-run'><div class='co'>{esc(d['title'][:110])}</div>"
+                 f"<span class='eia-faint'>{esc(d['tier'])} source · {esc(d['doc_type'])}</span></div>")
+            for j, it in enumerate(d["items"][:4]):
+                html(f"<div class='eia-ev'><div class='head'><span class='metric'>{esc(it['metric'])}</span>"
+                     f"<span class='val'>{esc(fmt_val(it['value'], it['unit']))}</span>"
+                     f"<span class='eia-muted'>{esc(it['period'] or 'no period')}{', page ' + str(it['page']) if it['page'] else ''}"
+                     f"</span></div><div class='eia-quote'>{esc((it['passage'] or '')[:400])}</div></div>")
+                source_actions({"source_url": d["url"], "source_title": d["title"], "page": it["page"],
+                                "source_id": _source_id(store, rid, it["fact_id"]), "passage": it["passage"],
+                                "source_tier": d["tier"]}, f"disc_{i}_{j}")
+    if b["alternatives"]:
+        html(section("Other strong findings"))
+        cols = st.columns(len(b["alternatives"]))
+        for col, a in zip(cols, b["alternatives"]):
+            col.button(f"{a['title'][:60]} ({a['status']}, {a['strength']})", key=f"disc_alt_{a['id']}",
+                       on_click=_pick_discovery, args=(a["id"],))
+    if pick:
+        st.button("Back to the agent's top discovery", key="disc_reset", on_click=_pick_discovery, args=("",))
 
 
 def _run_demo_now() -> None:
@@ -484,11 +700,12 @@ def financial_figure(fo: dict):
                     marker=dict(color=C_BLUE, cornerradius=4), row=1, col=1,
                     hovertemplate="Revenue: ₹%{y:,.0f} Cr<extra></extra>")
     low_row = 2 if rows == 2 else 1
-    for lab, col in (("EBITDA", C_ORANGE), ("PAT", C_AQUA)):
+    for lab, col in (("EBITDA", VIOLET), ("PAT", C_AQUA)):
         pts = fo.get(lab) or []
         if pts:
             fig.add_scatter(x=[p["period"] for p in pts], y=[p["value"] for p in pts], name=lab, mode="lines+markers",
-                            line=dict(color=col, width=2), marker=dict(size=8, line=dict(color="#0D1628", width=2)),
+                            line=dict(color=col, width=2.6, shape="spline", smoothing=0.6),
+                            marker=dict(size=8, line=dict(color="#0D1628", width=2)),
                             row=low_row, col=1, hovertemplate=f"{lab}: ₹%{{y:,.0f}} Cr<extra></extra>")
     fig.update_yaxes(tickformat="~s", gridcolor="#18253D", automargin=True, tickfont=dict(color=MUTED, size=11))
     periods = sorted({p["period"] for pts in fo.values() for p in (pts or [])}, key=_period_key)
@@ -521,11 +738,86 @@ def _big(value: str, label: str, color: str = "#FFFFFF", sub: str = "") -> str:
             + (f"<div style='font-size:.85rem;margin-top:2px'>{sub}</div>" if sub else "") + "</div>")
 
 
+DONUT_COLORS = {"Solar": "#EAB308", "Wind": "#14B8A6", "Hydro": "#3B82F6", "Coal": "#64748B", "Gas": "#F59E0B",
+                "Nuclear": "#8B5CF6"}
+
+
+def mix_donut(store: Store, rid: str) -> None:
+    """Energy source mix when the sources report capacity by source; otherwise the mix of findings by status."""
+    mix = views.energy_mix(store, rid)
+    with panel("dmix"):
+        if mix["items"]:
+            labels = [i["source"] for i in mix["items"]]
+            vals = [i["mw"] for i in mix["items"]]
+            colors = [DONUT_COLORS.get(l, C_GREY) for l in labels]
+            title, centre, sub = "Energy source mix", f"{mix['total'] / 1000:,.1f} GW", f"capacity, {mix['period']}"
+            hover = "%{label}: %{value:,.0f} MW (%{percent})<extra></extra>"
+        else:
+            hyps = store.hypotheses(rid)
+            order = [("Supported", TEAL_HI), ("Unresolved", AMBER), ("Weakened", ORANGE), ("Insufficient evidence", MUTED),
+                     ("Rejected", CORAL)]
+            counts = {lab: sum(1 for h in hyps if status_label(h.status) == lab) for lab, _ in order}
+            labels = [lab for lab, _ in order if counts[lab]]
+            vals = [counts[lab] for lab in labels]
+            colors = [c for lab, c in order if counts[lab]]
+            title, centre, sub = "Findings by verification status", f"{sum(vals)}", "findings tested"
+            hover = "%{label}: %{value} (%{percent})<extra></extra>"
+        html(ptitle(title))
+        if not vals:
+            html("<div class='eia-empty'>Nothing to show yet for this run.</div>")
+            return
+        fig = go.Figure(go.Pie(labels=labels, values=vals, hole=.72, sort=False, direction="clockwise",
+                               marker=dict(colors=colors, line=dict(color="#0B0F19", width=3)),
+                               textinfo="none", hovertemplate=hover))
+        fig.update_layout(showlegend=False, margin=dict(l=4, r=4, t=4, b=4),
+                          annotations=[dict(text=f"<b style='font-size:20px'>{centre}</b><br>"
+                                                 f"<span style='font-size:11px;color:#94A3B8'>{sub}</span>",
+                                            showarrow=False, font=dict(color="#F8FAFC"))])
+        a, b = st.columns([1.1, 1], vertical_alignment="center")
+        with a:
+            chart(fig, "", 230, key="dash_mix")
+        with b:
+            tot = sum(vals) or 1
+            html("<div class='eia-mix'>" + "".join(
+                f"<div class='row'><i style='background:{c};color:{c}'></i>{esc(l)}<span class='v'>{v / tot * 100:.0f}%</span></div>"
+                for l, v, c in zip(labels, vals, colors)) + "</div>")
+
+
+INSIGHT_STATUS = {"Supported": TEAL_HI, "Unresolved": AMBER, "Weakened": ORANGE, "Insufficient evidence": MUTED,
+                  "Rejected": CORAL, "Pending counter-check": AMBER}
+
+
+def insights_table(store: Store, rid: str) -> None:
+    hyps = sorted([h for h in store.hypotheses(rid) if h.status.value != "rejected"], key=lambda h: -h.score)[:6]
+    with panel("insights"):
+        html(ptitle("Operational insights", link("Discovery Feed", "View all")))
+        if not hyps:
+            html("<div class='eia-empty'>No findings in this run yet.</div>")
+            return
+        mod_names = {v: k for k, v in MODULE_PAGES.items()}
+        rows = ""
+        for i, h in enumerate(hyps, 1):
+            lab = status_label(h.status)
+            c = INSIGHT_STATUS.get(lab, MUTED)
+            nums = re.findall(r"(?:₹\s?)?-?\d[\d,]*(?:\.\d+)?\s?(?:%|x|MW|GW|MU|cr|₹ cr|pp|days)?", h.title)
+            latest = next((n.strip() for n in nums if re.search(r"[%xWUrpsy]", n)), "")
+            rows += (f"<tr><td><span class='eia-id'>F-{i:02d}</span></td><td>{esc(_short(h.title, 62))}</td>"
+                     f"<td>{esc(mod_names.get(h.module, h.module))}</td>"
+                     f"<td><span class='eia-status' style='color:{c};background:{_rgba(c, .12)};"
+                     f"border:1px solid {_rgba(c, .35)}'>{esc(lab)}</span></td>"
+                     f"<td style='color:#F8FAFC;font-weight:600;white-space:nowrap'>{esc(latest) or '—'}</td></tr>")
+        html("<table class='eia-table'><tr><th>ID</th><th>Finding</th><th>Module</th><th>Status</th><th>Key figure</th></tr>"
+             f"{rows}</table>")
+
+
 def overview_dashboard(store: Store, rid: str, run) -> None:
-    c1, c2, c3 = st.columns([1.12, 1, 1.05])
+    c1, c2 = st.columns([1.35, 1], gap="medium")
+    c3 = c2
+    with c2:
+        mix_donut(store, rid)
     # ---- column 1: financial performance + operational metrics --------------------------------
     with c1:
-        with panel("fin", 420):
+        with panel("fin"):
             fo = views.financial_overview(store, rid)
             rev, pat = fo["Revenue"], fo["PAT"]
             sub = []
@@ -542,34 +834,71 @@ def overview_dashboard(store: Store, rid: str, run) -> None:
             else:
                 html(f"<div class='eia-legend' style='margin:6px 0 0'>"
                      f"<span><i style='background:{C_BLUE};height:8px'></i>Revenue</span>"
-                     f"<span><i style='background:{C_ORANGE}'></i>EBITDA</span>"
+                     f"<span><i style='background:{VIOLET}'></i>EBITDA</span>"
                      f"<span><i style='background:{C_AQUA}'></i>Net profit (PAT)</span>"
                      f"<span class='eia-faint'>₹ crore</span></div>")
                 chart(financial_figure(fo), "", 320, key="dash_fin")
-        with panel("ops", 330):
+        with panel("ops"):
             om = views.operational_metrics(store, rid)
             html(ptitle("Operational metrics"))
-            if om["capacity"]:
+
+            def vol_tile(v, color):
+                sub = (f"<span style='color:{GREEN if v['yoy'] >= 0 else CORAL}'>{v['yoy']:+.1f}% YoY</span>"
+                       if v.get("yoy") is not None else f"<span class='eia-faint'>{esc(v['period'])}</span>")
+                return _big(f"{v['value']:,.1f} {UNIT_LABEL.get(v['unit'], v['unit'])}", f"{v['label']}, {v['period']}",
+                            color, sub)
+
+            def mw(v: float) -> str:  # small portfolios read better in MW than as 0.1 GW
+                return f"{v / 1000:,.2f} GW" if v >= 1000 else f"{v:,.0f} MW"
+
+            def cap_tile(color):
+                c = om["capacity"]
+                mix = om["mix"] if om["mix"] and om["mix"].get("period") == c["period"] else None
                 parts = " ".join(f"<span style='color:{SOURCE_COLORS.get(i['source'], MUTED)};margin-right:12px'>"
-                                 f"{esc(i['source'])} {i['mw'] / 1000:,.1f} GW</span>" for i in om["mix"]["items"])
-                html(_big(f"{om['capacity']['value'] / 1000:,.2f} GW", f"{om['capacity_label']}, {om['capacity']['period']}",
-                          CYAN, parts))
-            else:
-                html(_big("n/a", "Installed capacity", MUTED, "<span class='eia-faint'>Not found in the sources.</span>"))
-            a, b = st.columns(2)
-            with a:
+                                 f"{esc(i['source'])} {mw(i['mw'])}</span>" for i in (mix or {}).get("items", []))
+                return _big(mw(c["value"]), f"{om['capacity_label']}, {c['period']}", color, parts)
+
+            producer = om["business"] in ("oil_gas", "coal", "transmission") and om["volumes"]
+            if om["capacity"] and not producer:
+                html(cap_tile(CYAN))
+                tiles = []
                 u = om["under_construction"]
-                html(_big(f"{u['value'] / 1000:,.2f} GW" if u else "n/a", "Capacity under construction",
-                          GREEN if u else MUTED, f"<span class='eia-faint'>{esc(u['period'])}</span>" if u else ""))
-            with b:
+                if u:
+                    tiles.append(_big(mw(u["value"]), "Capacity under construction", GREEN,
+                                      f"<span class='eia-faint'>{esc(u['period'])}</span>"))
                 g = om["generation"]
-                sub = (f"<span style='color:{GREEN if (g['yoy'] or 0) >= 0 else CORAL}'>{g['yoy']:+.1f}% YoY</span>"
-                       if g and g["yoy"] is not None else "")
-                html(_big(f"{g['value']:,.0f} MU" if g else "n/a", f"Generation{', ' + g['period'] if g else ''}",
-                          GREEN if g else MUTED, sub))
+                if g:
+                    sub = (f"<span style='color:{GREEN if (g['yoy'] or 0) >= 0 else CORAL}'>{g['yoy']:+.1f}% YoY</span>"
+                           if g["yoy"] is not None else "")
+                    tiles.append(_big(f"{g['value']:,.0f} MU", f"Generation, {g['period']}", GREEN, sub))
+                for col, tile in zip(st.columns(2) if tiles else [], tiles):
+                    with col:
+                        html(tile)
+            elif om["volumes"]:  # oil, gas, coal or transmission business: show what it produces or operates
+                html(vol_tile(om["volumes"][0], CYAN))
+                extra = [vol_tile(v, GREEN) for v in om["volumes"][1:3]]
+                if om["capacity"]:  # a power side portfolio, shown after the core business
+                    extra.append(cap_tile(GREEN))
+                for col, tile in zip(st.columns(2), extra[:2]):
+                    with col:
+                        html(tile)
+            else:
+                html(_big("n/a", "Capacity or production", MUTED,
+                          "<span class='eia-faint'>No capacity, production or network figures were found in the sources."
+                          "</span>"))
+        insights_table(store, rid)
+        with panel("news"):
+            html(ptitle("Recent headlines", link("Timeline", "View all")))
+            dev = views.recent_developments(store, rid, 4)
+            if dev:
+                html("<ul class='eia-news'>" + "".join(
+                    f"<li><span class='eia-faint'>{esc(pd.to_datetime(d['date']).strftime('%d %b %Y'))}</span> "
+                    f"{esc(_short(d['label'], 95))}</li>" for d in dev) + "</ul>")
+            else:
+                html("<div class='eia-empty' style='padding:6px 2px'>No dated announcements were found.</div>")
     # ---- column 2: Nifty benchmarking, ratios, verdict ----------------------------------------
     with c2:
-        with panel("bench", 420):
+        with panel("bench"):
             html(ptitle("NIFTY 50 benchmarking"))
             if st.session_state.get("bench_range") not in ("1M", "3M", "6M", "1Y", "5Y"):
                 st.session_state["bench_range"] = "1Y"
@@ -599,7 +928,7 @@ def overview_dashboard(store: Store, rid: str, run) -> None:
                     fig.update_yaxes(ticksuffix="%", zeroline=True, zerolinecolor="#33476A")
                     chart(fig, "", 300, key="dash_bench")
                     st.caption(f"Rebased to 0% at the start of the period. Source: {sq.source}.")
-        with panel("ratios", 160):
+        with panel("ratios"):
             html(ptitle("Balance-sheet ratios", "<span class='eia-faint'>from filings</span>"))
             cells = []
             for r in views.balance_ratios(store, rid):
@@ -610,7 +939,7 @@ def overview_dashboard(store: Store, rid: str, run) -> None:
                              f"style='font-size:.8rem'>{esc(r['label'])}</div><div style='font-size:1.45rem;font-weight:700;"
                              f"color:{col}'>{v}</div><div class='eia-faint'>{esc(r['period'] or 'not found')}</div></div>")
             html(f"<div style='display:flex;gap:8px'>{''.join(cells)}</div>")
-        with panel("verdict", 170):
+        with panel("verdict"):
             vd = views.verdict(store, rid)
             rl = views.risk_level(store, rid)
             html(ptitle("Agent verdict", f"<span style='color:{ {'High': CORAL, 'Medium': AMBER, 'Low': GREEN}.get(rl['level'], MUTED)}'>"
@@ -624,7 +953,7 @@ def overview_dashboard(store: Store, rid: str, run) -> None:
                  f"<div class='eia-faint' style='display:block'>Ring: share of findings settled by evidence</div></div></div>")
     # ---- column 3: project pipeline, ESG, headlines -------------------------------------------
     with c3:
-        with panel("pipe", 600):
+        with panel("pipe"):
             html(ptitle("Project pipeline and ESG"))
             locs = views.project_locations(store, rid)
             if locs:
@@ -651,26 +980,32 @@ def overview_dashboard(store: Store, rid: str, run) -> None:
                 html("<div class='eia-empty' style='padding:10px 4px'>No Indian state is named in the project "
                      "disclosures found, so nothing can be placed on the map.</div>")
             esg = views.esg_series(store, rid)
-            a, b = st.columns(2)
-            with a:
-                share = esg["renewable_share"][-1]["value"] if esg["renewable_share"] else None
-                if share is not None:
-                    g = go.Figure(go.Indicator(mode="gauge+number", value=share, number=dict(suffix="%", font=dict(size=22)),
-                                               gauge=dict(axis=dict(range=[0, 100], tickcolor="#33476A"),
-                                                          bar=dict(color=GREEN), bgcolor="#13213A", borderwidth=0,
-                                                          steps=[dict(range=[0, 100], color="#13213A")])))
-                    g.update_layout(margin=dict(l=22, r=22, t=10, b=0))
-                    html("<div class='eia-muted' style='font-size:.84rem'>Renewable share of capacity</div>")
-                    chart(g, "", 170, key="dash_gauge")
-                else:
-                    html(_big("n/a", "Renewable share of capacity", MUTED))
-            with b:
-                it = esg["intensity"]
-                ch = esg["intensity_change_pct"]
-                sub = (f"<span style='color:{GREEN if ch < 0 else CORAL}'>{ch:+.0f}% since {esc(it[0]['period'])}</span>"
-                       if ch is not None else "")
-                html(_big(f"{it[-1]['value']:.3f}" if it else "n/a",
-                          f"Emission intensity, tCO2/MWh{', ' + it[-1]['period'] if it else ''}", GREEN if it else MUTED, sub))
+            if not esg["renewable_share"] and not esg["intensity"]:
+                html("<div class='eia-faint' style='margin:4px 0 8px'>No renewable share or emission intensity was "
+                     "reported in the sources.</div>")
+            if esg["renewable_share"] or esg["intensity"]:
+                a, b = st.columns(2)
+                with a:
+                    share = esg["renewable_share"][-1]["value"] if esg["renewable_share"] else None
+                    if share is not None:
+                        g = go.Figure(go.Indicator(mode="gauge+number", value=share,
+                                                   number=dict(suffix="%", font=dict(size=22)),
+                                                   gauge=dict(axis=dict(range=[0, 100], showticklabels=False, ticks=""),
+                                                              bar=dict(color=GREEN), bgcolor="#13213A", borderwidth=0,
+                                                              steps=[dict(range=[0, 100], color="#13213A")])))
+                        g.update_layout(margin=dict(l=34, r=34, t=16, b=6))
+                        html("<div class='eia-muted' style='font-size:.84rem'>Renewable share of capacity</div>")
+                        chart(g, "", 170, key="dash_gauge")
+                    else:
+                        html(_big("n/a", "Renewable share of capacity", MUTED))
+                with b:
+                    it = esg["intensity"]
+                    ch = esg["intensity_change_pct"]
+                    sub = (f"<span style='color:{GREEN if ch < 0 else CORAL}'>{ch:+.0f}% since {esc(it[0]['period'])}</span>"
+                           if ch is not None else "")
+                    html(_big(f"{it[-1]['value']:.3f}" if it else "n/a",
+                              f"Emission intensity, tCO2/MWh{', ' + it[-1]['period'] if it else ''}",
+                              GREEN if it else MUTED, sub))
             up = views.upcoming_projects(store, rid, 5)
             if up:
                 rows = "".join(f"<tr><td>{esc(_short(u['item'], 70))}</td><td style='white-space:nowrap'>"
@@ -681,15 +1016,7 @@ def overview_dashboard(store: Store, rid: str, run) -> None:
                      f"<table class='eia-table'><tr><th>Project / disclosure</th><th>Capacity</th><th>Status</th></tr>{rows}</table>")
             else:
                 html("<div class='eia-faint'>No pipeline, award or delay disclosures found.</div>")
-        with panel("news", 170):
-            html(ptitle("Recent headlines", link("Timeline", "View all")))
-            dev = views.recent_developments(store, rid, 4)
-            if dev:
-                html("<ul class='eia-news'>" + "".join(
-                    f"<li><span class='eia-faint'>{esc(pd.to_datetime(d['date']).strftime('%d %b %Y'))}</span> "
-                    f"{esc(_short(d['label'], 95))}</li>" for d in dev) + "</ul>")
-            else:
-                html("<div class='eia-empty' style='padding:6px 2px'>No dated announcements were found.</div>")
+
 
 
 def overview_executive(store: Store, rid: str, run) -> None:
@@ -697,7 +1024,7 @@ def overview_executive(store: Store, rid: str, run) -> None:
     hyps = store.hypotheses(rid)
     # ---- row 1: hero | progress | sources -------------------------------------------------------
     c1, c2, c3 = st.columns([2.1, 1.25, 1.05])
-    with c1, panel("hero", 300):
+    with c1, panel("hero"):
         done = run.status == "completed"
         updated = (run.finished_at or run.started_at or "")[:16].replace("T", " ")
         try:
@@ -714,7 +1041,7 @@ def overview_executive(store: Store, rid: str, run) -> None:
         b2.download_button("Download report", build_html(store, rid, 25),
                            f"energy_report_{run.company.name.lower().replace(' ', '_')[:30]}_{rid}"
                            f"{'_DEMO' if run.mode == 'demo' else ''}.html", "text/html", key="hero_dl")
-    with c2, panel("progress", 300):
+    with c2, panel("progress"):
         steps = views.research_progress(store, rid)
         pct = round(100 * sum(1 for x in steps if x["done"]) / len(steps))
         html(ptitle("Research progress", f"<span class='big'>{pct}%</span>") +
@@ -722,7 +1049,7 @@ def overview_executive(store: Store, rid: str, run) -> None:
              "".join(f"<div class='eia-step'><span class='ok' style='background:{GREEN if x['done'] else '#33240A'};"
                      f"color:{'#04140A' if x['done'] else AMBER}'>{'✓' if x['done'] else '!'}</span>{esc(x['step'])}"
                      f"<span class='v'>{esc(x['value'])}</span></div>" for x in steps))
-    with c3, panel("sources", 300):
+    with c3, panel("sources"):
         rows = views.sources_by_type(store, rid)
         html(ptitle("Sources analysed", f"<span class='big'>{s['sources_ok']}</span>") +
              ("".join(f"<div class='eia-srow'><span class='ic'></span>{esc(k)}<span class='v'>{v}</span></div>"
@@ -732,7 +1059,7 @@ def overview_executive(store: Store, rid: str, run) -> None:
 
     # ---- row 2: highlights | confidence | outlook ------------------------------------------------
     c1, c2, c3 = st.columns([2.1, 1.25, 1.05])
-    with c1, panel("highlights", 205):
+    with c1, panel("highlights"):
         hl = views.highlights(store, rid)
         tiles = [
             (hl["opportunities"], "Supported opportunities", GREEN, "#0A2416", "↗", "Discovery Feed", {"filter": "opportunity"}),
@@ -745,7 +1072,7 @@ def overview_executive(store: Store, rid: str, run) -> None:
             f"<span class='ic' style='color:{c}'>{ic}</span><div class='n' style='color:{c}'>{n}</div>"
             f"<div class='l' style='color:{c}'>{esc(lab)}</div></a>" for n, lab, c, bg, ic, pg, prm in tiles)
         html(ptitle("Key highlights") + f"<div class='eia-hl'>{cells}</div>")
-    with c2, panel("confidence", 205):
+    with c2, panel("confidence"):
         ec = views.evidence_confidence(store, rid)
         col = GREEN if (ec["pct"] or 0) >= 60 else AMBER if (ec["pct"] or 0) >= 35 else CORAL
         html(ptitle("Evidence confidence") +
@@ -755,7 +1082,7 @@ def overview_executive(store: Store, rid: str, run) -> None:
              f"<div><i style='background:{CORAL}'></i>Weak or insufficient ({ec['weak']})</div>"
              f"<div class='eia-faint' style='display:block'>Share of {ec['total']} live findings with strong or "
              f"moderate evidence</div></div></div>")
-    with c3, panel("outlook", 205):
+    with c3, panel("outlook"):
         ol = views.outlook(store, rid)
         col = {"good": GREEN, "bad": CORAL, "warn": AMBER}.get(ol["tone"], MUTED)
         icon = {"good": "↗", "bad": "↘", "warn": "→"}.get(ol["tone"], "?")
@@ -766,7 +1093,7 @@ def overview_executive(store: Store, rid: str, run) -> None:
 
     # ---- row 3: trends | energy mix | ESG -------------------------------------------------------
     c1, c2, c3 = st.columns([1.55, 1.1, 1.1])
-    with c1, panel("trends", 470):
+    with c1, panel("trends"):
         html(ptitle("Financial and operational trends"))
         avail = [k for k, m in TREND_METRICS.items() if views.trend(store, rid, m)]
         if not avail:
@@ -801,7 +1128,7 @@ def overview_executive(store: Store, rid: str, run) -> None:
             if odd:
                 st.caption("Grey: " + ", ".join(d["period"] for d in odd) + " fell more than 80% in one year, which usually "
                            "means a partial-year or misread figure. Check it in the Evidence Explorer.")
-    with c2, panel("mix", 470):
+    with c2, panel("mix"):
         mix = views.energy_mix(store, rid)
         html(ptitle("Energy mix", f"<span class='eia-faint'>{esc(mix['period'] or '')}</span>"))
         if not mix["items"]:
@@ -820,7 +1147,7 @@ def overview_executive(store: Store, rid: str, run) -> None:
             html("<div class='eia-mix'>" + "".join(
                 f"<div class='row'><i style='background:{SOURCE_COLORS.get(i['source'], MUTED)}'></i>{esc(i['source'])}"
                 f"<span class='v'>{i['mw']:,.0f} MW, {i['share']:.1f}%</span></div>" for i in mix["items"]) + "</div>")
-    with c3, panel("esg", 430):
+    with c3, panel("esg"):
         esg = views.esg_series(store, rid)
         ch = esg["intensity_change_pct"]
         right = (f"<span style='color:{GREEN if ch < 0 else CORAL};font-weight:700'>{'↓' if ch < 0 else '↑'} {abs(ch):.0f}%"
@@ -844,7 +1171,7 @@ def overview_executive(store: Store, rid: str, run) -> None:
 
     # ---- row 4: top findings | graph | timeline -------------------------------------------------
     c1, c2, c3 = st.columns([1.35, 1.3, 1.05])
-    with c1, panel("topfind", 400):
+    with c1, panel("topfind"):
         html(ptitle("Top findings", link("Discovery Feed", "View all")))
         if not hyps:
             html("<div class='eia-empty'>No findings yet: the sources did not contain enough evidence.</div>")
@@ -856,7 +1183,7 @@ def overview_executive(store: Store, rid: str, run) -> None:
                         f"<div class='d'>{esc(_short(h.statement, 110))}</div></div>"
                         f"<span class='chip'>{status_chip(status_label(h.status))}<br>{strength_chip(h.strength.value)}</span></div>")
         html("".join(rows))
-    with c2, panel("graph", 400):
+    with c2, panel("graph"):
         html(ptitle("Discovery graph", link("Discovery Graph", "Open full graph")))
         if hyps:
             g = build_graph(store, rid, [hyps[0].id], None, False)
@@ -866,7 +1193,7 @@ def overview_executive(store: Store, rid: str, run) -> None:
             st.caption(f"Evidence network for: {hyps[0].title}")
         else:
             html("<div class='eia-empty'>Nothing to map yet.</div>")
-    with c3, panel("tl", 400):
+    with c3, panel("tl"):
         html(ptitle("Recent timeline", link("Timeline", "View full timeline")))
         dev = views.recent_developments(store, rid, 6)
         if not dev:
@@ -1106,6 +1433,22 @@ def page_discovery_feed(store: Store) -> None:
 # module pages
 # ------------------------------------------------------------------------------------------------
 
+def readable_notes(notes: list[str]) -> list[str]:
+    """Metric keys become their labels, and the many 'older than 10 years' notes collapse into one line."""
+    out, stale = [], []
+    for n in notes:
+        m = re.match(r"([a-z0-9_]+)( FY\d{4})?: (.*)", n)
+        if m and m.group(1) in METRICS:
+            if "more than 10 years older" in m.group(3):
+                stale.append(METRICS[m.group(1)].label + (m.group(2) or ""))
+                continue
+            n = f"{METRICS[m.group(1)].label}{m.group(2) or ''}: {m.group(3)}"
+        out.append(n)
+    if stale:
+        out.append("Figures more than 10 years older than the latest are not used in trends: " + ", ".join(stale) + ".")
+    return out
+
+
 def page_module(store: Store, key: str) -> None:
     rid = need_run(store)
     if not rid:
@@ -1117,18 +1460,33 @@ def page_module(store: Store, key: str) -> None:
     html(f"<div style='margin:.2rem 0 .6rem'>{module_chip(mr['status'])}<span class='eia-muted'>{esc(mr['summary'])}</span></div>")
     if mr["missing"]:
         html(f"<div class='eia-src'>Not found in the sources, so not analysed: {esc(', '.join(mr['missing']))}.</div>")
-    for n in mr["notes"]:
-        html(f"<div class='eia-src' style='color:{AMBER}'>{esc(n)}</div>")
+    if mr["notes"]:
+        html("<div class='eia-callout warn' style='margin:6px 0 12px'>" + "<br>".join(esc(n) for n in readable_notes(mr["notes"]))
+             + "</div>")
     metrics = [m for m in MODULE_CHARTS[key] if m in METRICS]
     sdf = views.metric_series_df(store, rid, metrics)
     if not sdf.empty:
-        cols = st.columns(2)
-        for i, (unit, g) in enumerate(sdf.groupby("unit")):
+        # a metric with a single year is not a trend: it is shown as a figure, not as a lone dot on a chart
+        npts = sdf.groupby("metric")["period"].nunique()
+        single = sdf[sdf["metric"].map(npts) < 2]
+        multi = sdf[sdf["metric"].map(npts) >= 2]
+        groups = list(multi.groupby("unit"))
+        cols = st.columns(2) if len(groups) > 1 else [st.container()]
+        for i, (unit, g) in enumerate(groups):
             fig = px.line(g, x="period", y="value", color="metric", markers=True, color_discrete_sequence=SERIES_COLORS,
                           labels={"value": UNIT_NAMES.get(unit, unit), "period": "", "metric": ""})
             fig.update_traces(line=dict(width=2.6), marker=dict(size=8))
-            with cols[i % 2], panel(f"m_{key}_{i}"):
+            fig.update_xaxes(type="category", categoryorder="array",
+                             categoryarray=sorted(g["period"].unique(), key=_period_key))
+            last_alone = len(groups) > 1 and len(groups) % 2 == 1 and i == len(groups) - 1
+            with (st.container() if last_alone else cols[i % len(cols)]), panel(f"m_{key}_{i}"):
                 chart(fig, f"Annual, {UNIT_NAMES.get(unit, unit)}", 320, key=f"mod_{key}_{unit}")
+        if not single.empty:
+            tiles = "".join(
+                f"<div class='eia-stat'><div class='v'>{esc(fmt_val(r['value'], r['unit']))}</div>"
+                f"<div class='l'>{esc(r['metric'])}</div><div class='n'>{esc(r['period'])} · one year reported, no trend</div></div>"
+                for _, r in single.sort_values("metric").iterrows())
+            html(section("Single-year figures") + f"<div class='eia-stats'>{tiles}</div>")
     qdf = views.metric_series_df(store, rid, metrics, "quarterly")
     for unit, g in (qdf.groupby("unit") if not qdf.empty else []):
         fig = px.bar(g, x="period", y="value", color="metric", barmode="group", color_discrete_sequence=SERIES_COLORS,
@@ -1139,7 +1497,7 @@ def page_module(store: Store, key: str) -> None:
         st.caption("No time series to chart for this module.")
     if mr["rows"]:
         html(section("Module table"))
-        tbl = pd.DataFrame(mr["rows"]).astype(str)
+        tbl = pd.DataFrame(mr["rows"]).astype(str).replace({"None": "—", "nan": "—"})
         tbl.columns = [c.replace("_", " ").capitalize() for c in tbl.columns]
         st.dataframe(tbl, hide_index=True, width="stretch")
     mh = [h for h in store.hypotheses(rid) if h.module == key]
@@ -1467,6 +1825,9 @@ def sidebar(store: Store) -> str:
             st.session_state["run_id"] = sel
         else:
             st.caption("No research runs yet.")
+        n_runs = len(runs)
+        html(f"<div class='eia-user'><div class='av'>EI</div><div><div class='nm'>Research workspace</div>"
+             f"<div class='rl'>Agent online · {n_runs} run{'s' if n_runs != 1 else ''}</div></div></div>")
     return page
 
 

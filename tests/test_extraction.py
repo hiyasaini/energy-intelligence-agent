@@ -78,7 +78,7 @@ def test_html_table_rows():
 def test_pdf_page_numbers_are_kept():
     reportlab = pytest.importorskip("reportlab")
     from reportlab.lib.pagesizes import A4
-    from reportlab.pdfgen import canvas
+    canvas = pytest.importorskip("reportlab.pdfgen.canvas", reason="reportlab not installed")
     buf = io.BytesIO()
     c = canvas.Canvas(buf, pagesize=A4)
     c.drawString(72, 800, "Annual Report 2024-25")
@@ -186,3 +186,70 @@ def test_unreadable_header_stops_row_attribution():
             "Particulars   H1 A   H1 B   Q9 X   2023 2024 ??\nRevenue from operations   1   2   3   4\n")
     vals = {f.value for f in by(run(text), "revenue_cr")}
     assert vals == {10, 12}
+
+
+# ---- oil, gas, coal and transmission businesses (fictitious values) ------------------------------
+
+def test_coal_production_and_target():
+    fs = run("Raw coal production stood at 781.1 million tonnes in FY2025.\n"
+             "The company targets coal production of 1 billion tonnes by FY2030.")
+    p = by(fs, "coal_production_mt")
+    assert p and p[0].value == 781.1 and p[0].unit == "Mt" and p[0].period == "FY2025"
+    t = by(fs, "coal_target_mt")
+    assert t and t[0].value == 1000 and t[0].target_year == 2030
+
+
+def test_oil_gas_units():
+    fs = run("In FY2025, oil and gas production was 42.5 MMTOE. Crude oil production of 19.2 MMT and "
+             "natural gas production of 20.1 BCM were reported in FY2025. Refinery throughput was 68.3 MMT in FY2025.")
+    assert by(fs, "oil_gas_production_mtoe")[0].value == 42.5
+    assert by(fs, "crude_production_mt")[0].value == 19.2
+    assert by(fs, "gas_production_bcm")[0].value == 20.1
+    assert by(fs, "refinery_throughput_mt")[0].value == 68.3
+
+
+def test_transmission_network():
+    fs = run("As on 31 March 2025 the transmission network comprised 1,80,000 ckm and transformation capacity "
+             "of 5,50,000 MVA.")
+    assert by(fs, "transmission_ckm")[0].value == 180000
+    assert by(fs, "transformation_mva")[0].value == 550000
+
+
+def test_mass_units_never_attach_to_money_or_power():
+    fs = run("Revenue from operations was 1,200 MT in FY2025. Installed capacity was 5 MT in FY2025.")
+    assert not by(fs, "revenue_cr") and not by(fs, "installed_capacity_mw")
+
+
+def test_total_and_renewable_targets_in_one_sentence_are_kept_apart():
+    fs = run("The company targets a total installed capacity of 149 GW by 2032, including 60 GW of renewable "
+             "energy capacity.")
+    assert [(f.metric, f.value) for f in by(fs, "capacity_target_mw")] == [("capacity_target_mw", 149000)]
+    assert [(f.metric, f.value) for f in by(fs, "renewable_target_mw")] == [("renewable_target_mw", 60000)]
+
+
+class _FakePage:
+    def __init__(self, text):
+        self.text = text
+
+    def get_text(self, kind="text"):
+        return self.text
+
+
+class _FakePdf(list):
+    pass
+
+
+def test_long_reports_keep_financial_statements_beyond_the_page_budget():
+    from eia.extraction.documents import choose_pages
+    pages = [_FakePage(f"Page {i}: corporate governance and CSR narrative.") for i in range(700)]
+    pages[519] = _FakePage("Consolidated Statement of Profit and Loss for the year ended 31 March 2025")
+    pages[609] = _FakePage("Ten Year Financial Highlights: revenue from operations, borrowings, capex")
+    pages[450] = _FakePage("Installed capacity stood at 1,200 MW; generation 5,000 MU; PLF 78%")
+    chosen = choose_pages(_FakePdf(pages), 350)
+    assert len(chosen) == 350 and chosen == sorted(chosen)
+    assert {519, 609, 450} <= set(chosen) and set(range(100)) <= set(chosen)
+
+
+def test_short_reports_are_read_whole():
+    from eia.extraction.documents import choose_pages
+    assert choose_pages(_FakePdf([_FakePage("x")] * 40), 350) == list(range(40))
