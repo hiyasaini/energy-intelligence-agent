@@ -1,0 +1,89 @@
+name,nse,bse,aliases,segment,website
+NTPC Ltd,NTPC,,National Thermal Power Corporation|NTPC Limited,thermal+renewable generation,ntpc.co.in
+NTPC Green Energy Ltd,NTPCGREEN,,NGEL|NTPC Green,renewable generation,ngel.in
+NHPC Ltd,NHPC,,National Hydroelectric Power Corporation,hydro generation,nhpcindia.com
+SJVN Ltd,SJVN,,Satluj Jal Vidyut Nigam,hydro+renewable generation,sjvn.nic.in
+Power Grid Corporation of India Ltd,POWERGRID,,PGCIL|Power Grid,transmission,powergrid.in
+Tata Power Company Ltd,TATAPOWER,,Tata Power,integrated utility,tatapower.com
+Adani Green Energy Ltd,ADANIGREEN,,AGEL|Adani Green,renewable generation,adanigreenenergy.com
+Adani Power Ltd,ADANIPOWER,,Adani Power,thermal generation,adanipower.com
+Adani Energy Solutions Ltd,ADANIENSOL,,Adani Transmission|AESL,transmission+distribution,adanienergysolutions.com
+JSW Energy Ltd,JSWENERGY,,JSW Energy,thermal+renewable generation,
+Torrent Power Ltd,TORNTPOWER,,Torrent Power,integrated utility,torrentpower.com
+CESC Ltd,CESC,,Calcutta Electric Supply Corporation,integrated utility,cesc.co.in
+NLC India Ltd,NLCINDIA,,Neyveli Lignite Corporation|NLC,lignite mining+generation,nlcindia.in
+Suzlon Energy Ltd,SUZLON,,Suzlon,wind turbine manufacturing,suzlon.com
+Inox Wind Ltd,INOXWIND,,Inox Wind,wind turbine manufacturing,inoxwind.com
+Inox Green Energy Services Ltd,INOXGREEN,,Inox Green,wind O&M,
+Waaree Energies Ltd,WAAREEENER,,Waaree,solar module manufacturing,waaree.com
+Premier Energies Ltd,PREMIERENE,,Premier Energies,solar cell+module manufacturing,
+KPI Green Energy Ltd,KPIGREEN,,KPI Green,renewable IPP,
+ACME Solar Holdings Ltd,ACMESOLAR,,ACME Solar,renewable IPP,
+Indian Renewable Energy Development Agency Ltd,IREDA,,IREDA,renewable energy finance,ireda.in
+Power Finance Corporation Ltd,PFC,,PFC|Power Finance,power sector finance,pfcindia.com
+REC Ltd,RECLTD,,Rural Electrification Corporation|REC,power sector finance,
+Coal India Ltd,COALINDIA,,CIL|Coal India,coal mining,coalindia.in
+Oil and Natural Gas Corporation Ltd,ONGC,,ONGC,oil & gas upstream,ongcindia.com
+Oil India Ltd,OIL,,Oil India,oil & gas upstream,
+GAIL (India) Ltd,GAIL,,GAIL|Gas Authority of India,gas transmission,gail.co.in
+Indian Oil Corporation Ltd,IOC,,IOCL|Indian Oil,oil refining+marketing,iocl.com
+Bharat Petroleum Corporation Ltd,BPCL,,BPCL|Bharat Petroleum,oil refining+marketing,bharatpetroleum.in
+Hindustan Petroleum Corporation Ltd,HINDPETRO,,HPCL|Hindustan Petroleum,oil refining+marketing,hindustanpetroleum.com
+Petronet LNG Ltd,PETRONET,,Petronet,LNG regasification,
+Gujarat Gas Ltd,GUJGASLTD,,Gujarat Gas,city gas distribution,
+Indraprastha Gas Ltd,IGL,,IGL|Indraprastha Gas,city gas distribution,
+Mahanagar Gas Ltd,MGL,,MGL|Mahanagar Gas,city gas distribution,
+Indian Energy Exchange Ltd,IEX,,IEX,power exchange,iexindia.com
+Reliance Power Ltd,RPOWER,,Reliance Power,thermal generation,
+RattanIndia Power Ltd,RTNPOWER,,RattanIndia Power,thermal generation,
+Jaiprakash Power Ventures Ltd,JPPOWER,,JP Power,thermal+hydro generation,
+Sterling and Wilson Renewable Energy Ltd,SWSOLAR,,Sterling and Wilson|SWREL,solar EPC,
+Borosil Renewables Ltd,BORORENEW,,Borosil Renewables,solar glass manufacturing,
+Orient Green Power Company Ltd,ORIENTGREEN,,Orient Green,wind generation,
+Bharat Heavy Electricals Ltd,BHEL,,BHEL,power equipment,bhel.com
+Reliance Industries Ltd,RELIANCE,,RIL|Reliance,conglomerate (energy+other),ril.com
+Adani Enterprises Ltd,ADANIENT,,Adani Enterprises,non-energy: Metals & Mining,
+Adani Ports and Special Economic Zone Ltd,ADANIPORTS,,Adani Ports|Adani Ports & SEZ,non-energy: Services,
+Apollo Hospitals Enterprise Ltd,APOLLOHOSP,,Apollo Hospitals,non-energy: Healthcare,
+Asian Paints Ltd,ASIANPAINT,,Asian Paints,non-energy: Consumer Durables,
+Axis Bank Ltd,AXISBANK,,Axis Bank,non-energy: Financial Services,
+Bajaj Auto Ltd,BAJAJ-AUTO,,Bajaj Auto,non-energy: Automobile and Auto Components,
+Bajaj Finance Ltd,BAJFINANCE,,Bajaj Finance,non-energy: Financial Services,
+Bajaj Finserv Ltd,BAJAJFINSV,,Bajaj Finserv,non-energy: Financial Services,
+Bharat Electronics Ltd,BEL,,Bharat Electronics|BEL,non-energy: Capital Goods,
+Bharti Airtel Ltd,BHARTIARTL,,Bharti Airtel|Airtel,non-energy: Telecommunication,
+Cipla Ltd,CIPLA,,Cipla,non-energy: Healthcare,
+Dr. Reddy's Laboratories Ltd,DRREDDY,,Dr Reddys|Dr. Reddy's,non-energy: Healthcare,
+Eicher Motors Ltd,EICHERMOT,,Eicher Motors,non-energy: Automobile and Auto Components,
+Eternal Ltd,ETERNAL,,Eternal|Zomato,non-energy: Consumer Services,
+Grasim Industries Ltd,GRASIM,,Grasim,non-energy: Construction Materials,
+HCL Technologies Ltd,HCLTECH,,HCLTech|HCL Technologies,non-energy: Information Technology,
+HDFC Bank Ltd,HDFCBANK,,HDFC Bank,non-energy: Financial Services,
+HDFC Life Insurance Company Ltd,HDFCLIFE,,HDFC Life,non-energy: Financial Services,
+Hindalco Industries Ltd,HINDALCO,,Hindalco,non-energy: Metals & Mining,
+Hindustan Unilever Ltd,HINDUNILVR,,HUL|Hindustan Unilever,non-energy: Fast Moving Consumer Goods,
+ICICI Bank Ltd,ICICIBANK,,ICICI Bank,non-energy: Financial Services,
+InterGlobe Aviation Ltd,INDIGO,,IndiGo|InterGlobe Aviation,non-energy: Services,
+Infosys Ltd,INFY,,Infosys,non-energy: Information Technology,
+ITC Ltd,ITC,,ITC,non-energy: Fast Moving Consumer Goods,
+Jio Financial Services Ltd,JIOFIN,,Jio Financial,non-energy: Financial Services,
+JSW Steel Ltd,JSWSTEEL,,JSW Steel,non-energy: Metals & Mining,
+Kotak Mahindra Bank Ltd,KOTAKBANK,,Kotak Bank|Kotak Mahindra Bank,non-energy: Financial Services,
+Larsen & Toubro Ltd,LT,,L&T|Larsen and Toubro,non-energy: Construction,
+Mahindra & Mahindra Ltd,M&M,,M&M|Mahindra and Mahindra,non-energy: Automobile and Auto Components,
+Maruti Suzuki India Ltd,MARUTI,,Maruti|Maruti Suzuki,non-energy: Automobile and Auto Components,
+Max Healthcare Institute Ltd,MAXHEALTH,,Max Healthcare,non-energy: Healthcare,
+Nestle India Ltd,NESTLEIND,,Nestle|Nestlé India,non-energy: Fast Moving Consumer Goods,
+SBI Life Insurance Company Ltd,SBILIFE,,SBI Life,non-energy: Financial Services,
+Shriram Finance Ltd,SHRIRAMFIN,,Shriram Finance,non-energy: Financial Services,
+State Bank of India,SBIN,,SBI|State Bank of India,non-energy: Financial Services,
+Sun Pharmaceutical Industries Ltd,SUNPHARMA,,Sun Pharma,non-energy: Healthcare,
+Tata Consultancy Services Ltd,TCS,,TCS|Tata Consultancy Services,non-energy: Information Technology,
+Tata Consumer Products Ltd,TATACONSUM,,Tata Consumer,non-energy: Fast Moving Consumer Goods,
+Tata Motors Passenger Vehicles Ltd,TMPV,,Tata Motors|Tata Motors Passenger Vehicles,non-energy: Automobile and Auto Components,
+Tata Steel Ltd,TATASTEEL,,Tata Steel,non-energy: Metals & Mining,
+Tech Mahindra Ltd,TECHM,,Tech Mahindra,non-energy: Information Technology,
+Titan Company Ltd,TITAN,,Titan,non-energy: Consumer Durables,
+Trent Ltd,TRENT,,Trent,non-energy: Consumer Services,
+UltraTech Cement Ltd,ULTRACEMCO,,UltraTech|UltraTech Cement,non-energy: Construction Materials,
+Wipro Ltd,WIPRO,,Wipro,non-energy: Information Technology,
